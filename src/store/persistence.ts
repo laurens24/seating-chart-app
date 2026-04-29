@@ -23,9 +23,11 @@ export function clearState(): void {
   localStorage.removeItem(KEY)
 }
 
-export function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
   let timer: ReturnType<typeof setTimeout>
-  return ((...args: unknown[]) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((...args: any[]) => {
     clearTimeout(timer)
     timer = setTimeout(() => fn(...args), ms)
   }) as T

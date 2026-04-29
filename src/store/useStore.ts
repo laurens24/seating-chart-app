@@ -1,6 +1,6 @@
 // src/store/useStore.ts
 import { create } from 'zustand'
-import { Guest, Relationship, Table, AppState } from '../types'
+import { Guest, Table, AppState } from '../types'
 import { newId } from '../utils/ids'
 import { saveState, loadState, debounce } from './persistence'
 
@@ -30,7 +30,7 @@ interface Store extends AppState {
 const saved = loadState()
 const initial: AppState = saved ?? { guests: [], relationships: [], tables: [] }
 
-export const useStore = create<Store>((set, get) => ({
+export const useStore = create<Store>((set) => ({
   ...initial,
 
   addGuest: (name) => set((s) => {
