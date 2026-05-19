@@ -1,18 +1,21 @@
-# Wedding Seating Chart
+# SeatingHelper
 
-A drag-and-drop wedding seating chart app. Manage your guest list, define relationships, and let the app suggest optimal table assignments — all in the browser with no backend required.
+A drag-and-drop event seating planner. Build your guest list, define relationships, and let the app suggest and fix seat assignments — all in the browser with no account required.
+
+**Live app:** https://laurens24.github.io/seating-chart-app/
 
 ![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue) ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-06B6D4) ![Vite](https://img.shields.io/badge/Vite-6-646CFF)
 
 ## Features
 
-- **Guest list** — add, edit, tag, and search guests; bulk-select for tag application or deletion
-- **Relationships** — mark guests as *together*, *apart*, or *plus-one*; conflict warnings appear automatically
-- **Drag and drop** — drag guests onto tables on the floor plan, or drag tags directly onto tables
-- **Suggest seating** — auto-assign unassigned guests to tables respecting relationships; generates new tables if needed
-- **Import guests** — upload a `.txt` or `.csv` file, or paste names directly; supports `Alice & Bob` / `Alice and Bob` syntax to auto-create plus-one pairs
-- **Export** — print or export the table list
-- **Persistent state** — everything is saved to `localStorage`; no account needed
+- **Guest list** — add, edit, tag, and search guests; bulk-select to apply tags, unassign, or delete
+- **Relationships** — mark pairs as *together*, *apart*, or *plus-one*; conflict warnings surface automatically
+- **Drag and drop** — drag guests onto tables on the floor plan, drag tags onto tables to fill seats by group
+- **Import** — upload `.txt` or `.csv`, or paste names directly; `Alice & Bob` / `Alice and Bob` syntax creates plus-one pairs automatically; duplicate names prompt for rename before import
+- **Suggest seating** — auto-assigns all unassigned guests respecting relationships; creates new tables if needed
+- **Fix conflicts** — one click resolves all seating conflicts (apart violations and split plus-ones)
+- **Export** — save your full chart as JSON or print the table list
+- **Auto-save** — state persists to `localStorage`; no login needed
 
 ## Getting Started
 
@@ -21,9 +24,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+Open [http://localhost:5173/seating-chart-app/](http://localhost:5173/seating-chart-app/).
 
-## Build
+## Build & Preview
 
 ```bash
 npm run build
