@@ -14,6 +14,16 @@ function SeatedGuestPill({ guest, guests, relationships, hoveredGuestId }: {
   const plusOneConflict = hasGuestPlusOneConflict(guest.id, guests, relationships)
   const isHighlighted = hoveredGuestId === guest.id
 
+  const plusOnePartnerName = (() => {
+    if (!plusOneConflict) return null
+    const rel = relationships.find(
+      (r) => r.type === 'plus-one' && (r.guestAId === guest.id || r.guestBId === guest.id)
+    )
+    if (!rel) return null
+    const partnerId = rel.guestAId === guest.id ? rel.guestBId : rel.guestAId
+    return guests.find((g) => g.id === partnerId)?.name ?? null
+  })()
+
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `seated-${guest.id}`,
     data: { guestId: guest.id },
@@ -24,7 +34,7 @@ function SeatedGuestPill({ guest, guests, relationships, hoveredGuestId }: {
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      title={plusOneConflict ? `${guest.name} is separated from their plus-one` : undefined}
+      title={plusOneConflict ? `${guest.name} is separated from their plus-one${plusOnePartnerName ? `: ${plusOnePartnerName}` : ''}` : undefined}
       onMouseEnter={() => setHoveredGuestId(guest.id)}
       onMouseLeave={() => setHoveredGuestId(null)}
       style={{ opacity: isDragging ? 0.4 : 1, cursor: 'grab' }}

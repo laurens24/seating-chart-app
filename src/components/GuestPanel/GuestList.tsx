@@ -183,11 +183,6 @@ export function GuestList() {
 
       {isMultiSelect && (
         <div className="px-3 pb-2 shrink-0 flex flex-col gap-2 border-b border-stone-200">
-          <div className="flex items-center gap-2">
-            <button onClick={selectAll} className="text-xs text-violet-600 hover:text-violet-300">All</button>
-            <button onClick={selectNone} className="text-xs text-stone-400 hover:text-stone-600">None</button>
-            <span className="text-xs text-stone-400 ml-auto">{checkedIds.size} selected</span>
-          </div>
           <div className="flex gap-1">
             <TagInput
               value={tagInput}
@@ -205,20 +200,27 @@ export function GuestList() {
               Apply
             </button>
           </div>
-          <button
-            onClick={unassignSelected}
-            disabled={!guests.some((g) => checkedIds.has(g.id) && g.tableId !== null)}
-            className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed text-left"
-          >
-            Unassign selected
-          </button>
-          <button
-            onClick={deleteSelected}
-            disabled={checkedIds.size === 0}
-            className="btn-danger text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed text-left"
-          >
-            Delete selected
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={unassignSelected}
+              disabled={!guests.some((g) => checkedIds.has(g.id) && g.tableId !== null)}
+              className="btn-primary text-xs py-1.5 flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Unassign selected
+            </button>
+            <button
+              onClick={deleteSelected}
+              disabled={checkedIds.size === 0}
+              className="btn-danger text-xs py-1.5 flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Delete selected
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={selectAll} className="text-xs text-violet-600 hover:text-violet-300">All</button>
+            <button onClick={selectNone} className="text-xs text-stone-400 hover:text-stone-600">None</button>
+            <span className="text-xs text-stone-400 ml-auto">{checkedIds.size} selected</span>
+          </div>
         </div>
       )}
 
