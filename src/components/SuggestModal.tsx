@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SuggestedMove, Table } from '../types'
+
 import { useStore } from '../store/useStore'
 import { suggestMoves } from '../engine/suggest'
 

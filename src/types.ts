@@ -19,7 +19,7 @@ export interface Table {
   name: string
   capacity: number
   position: { x: number; y: number }
-  shape: 'round' | 'rectangular'
+  shape: 'round' | 'rect'
 }
 
 export interface AppState {

@@ -24,7 +24,7 @@ export function parseJson(content: string): AppStateParseResult | ParseResult {
   try {
     parsed = JSON.parse(content)
   } catch {
-    return { guests: [], warnings: [], error: 'Invalid JSON file.' }
+    return { guests: [], relationships: [], warnings: [], error: 'Invalid JSON file.' }
   }
   if (
     parsed !== null &&
@@ -35,11 +35,11 @@ export function parseJson(content: string): AppStateParseResult | ParseResult {
   ) {
     const state = parsed as AppState
     if (!Array.isArray(state.guests) || !Array.isArray(state.relationships) || !Array.isArray(state.tables)) {
-      return { guests: [], warnings: [], error: 'JSON file has an invalid structure.' }
+      return { guests: [], relationships: [], warnings: [], error: 'JSON file has an invalid structure.' }
     }
     return { state }
   }
-  return { guests: [], warnings: [], error: 'JSON file is not a valid seating chart export.' }
+  return { guests: [], relationships: [], warnings: [], error: 'JSON file is not a valid seating chart export.' }
 }
 
 export function parseTxt(content: string): ParseResult {
@@ -75,11 +75,11 @@ export function parseTxt(content: string): ParseResult {
 
 export function parseCsv(content: string): ParseResult {
   const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
-  if (lines.length === 0) return { guests: [], warnings: [], error: 'File is empty' }
+  if (lines.length === 0) return { guests: [], relationships: [], warnings: [], error: 'File is empty' }
 
   const headers = splitCsvLine(lines[0]).map((h) => h.toLowerCase().trim())
   if (!headers.includes('name')) {
-    return { guests: [], warnings: [], error: 'CSV must have a "name" column' }
+    return { guests: [], relationships: [], warnings: [], error: 'CSV must have a "name" column' }
   }
 
   const nameIdx = headers.indexOf('name')

@@ -37,7 +37,7 @@ interface Props {
 }
 
 export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect, isChecked }: Props) {
-  const { relationships, guests, setHoveredTag, hoveredGuestId, setHoveredGuestId } = useStore()
+  const { relationships, guests, hoveredGuestId, setHoveredGuestId } = useStore()
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: guest.id,
     data: { guestId: guest.id },
@@ -81,7 +81,7 @@ export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect
         <input
           type="checkbox"
           checked={isChecked}
-          onChange={(e) => onSelect(guest.id, e.nativeEvent.shiftKey)}
+          onChange={(e) => onSelect(guest.id, (e.nativeEvent as MouseEvent).shiftKey)}
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           className="accent-violet-500 shrink-0"

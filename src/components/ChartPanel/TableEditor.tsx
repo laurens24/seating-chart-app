@@ -11,7 +11,7 @@ export function TableEditor({ table, onClose }: Props) {
   const { updateTable, removeTable } = useStore()
   const [name, setName] = useState(table.name)
   const [capacity, setCapacity] = useState(String(table.capacity))
-  const [shape, setShape] = useState<'round' | 'rectangular'>(table.shape)
+  const [shape, setShape] = useState<'round' | 'rect'>(table.shape)
 
   const save = () => {
     const cap = parseInt(capacity, 10)
@@ -39,11 +39,11 @@ export function TableEditor({ table, onClose }: Props) {
         />
         <select
           value={shape}
-          onChange={(e) => setShape(e.target.value as 'round' | 'rectangular')}
+          onChange={(e) => setShape(e.target.value as 'round' | 'rect')}
           className="flex-1 text-sm bg-gray-700 border border-gray-600 rounded text-gray-200 px-1"
         >
           <option value="round">Round</option>
-          <option value="rectangular">Rect</option>
+          <option value="rect">Rect</option>
         </select>
       </div>
       <div className="flex gap-2">
