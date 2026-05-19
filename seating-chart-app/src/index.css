@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply px-3 py-1.5 text-sm rounded transition-colors;
+  }
+  .btn-secondary {
+    @apply btn bg-stone-200 text-stone-800 hover:bg-stone-300;
+  }
+  .btn-primary {
+    @apply btn bg-violet-700 text-white hover:bg-violet-600;
+  }
+  .btn-ghost {
+    @apply btn text-stone-600 hover:text-stone-900;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full px-2 py-1.5 text-sm bg-white border border-stone-300 rounded text-stone-900 focus:outline-none focus:border-violet-500;
+  }
+
+  /* Modal overlay + panel */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/30 flex items-center justify-center z-50;
+  }
+  .modal-panel {
+    @apply bg-white rounded-lg p-6 shadow-xl;
+  }
+
+  /* Section label */
+  .field-label {
+    @apply text-xs text-stone-500 uppercase tracking-wide;
+  }
+}
+
+@media print {
+  body { background: white; color: black; }
+  header, aside, .no-print { display: none !important; }
+  .print-only { display: block !important; }
+}

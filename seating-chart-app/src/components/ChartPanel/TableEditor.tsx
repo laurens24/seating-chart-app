@@ -21,12 +21,12 @@ export function TableEditor({ table, onClose }: Props) {
   }
 
   return (
-    <div className="absolute z-20 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-3 w-48"
-      style={{ top: table.position.y + 60, left: table.position.x - 20 }}
-    >
+    <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-3 w-48">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && save()}
+        placeholder="Table name"
         className="w-full px-2 py-1 text-sm bg-gray-700 border border-gray-600 rounded text-gray-100 mb-2 focus:outline-none focus:border-violet-500"
       />
       <div className="flex gap-2 mb-2">
@@ -48,7 +48,7 @@ export function TableEditor({ table, onClose }: Props) {
       </div>
       <div className="flex gap-2">
         <button onClick={save} className="flex-1 py-1 text-xs bg-violet-600 text-white rounded hover:bg-violet-700">Save</button>
-        <button onClick={() => { removeTable(table.id); onClose() }} className="py-1 px-2 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900">Del</button>
+        <button onClick={() => { removeTable(table.id); onClose() }} className="py-1 px-2 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900">Delete</button>
         <button onClick={onClose} className="py-1 px-2 text-xs text-gray-400 hover:text-white">✕</button>
       </div>
     </div>

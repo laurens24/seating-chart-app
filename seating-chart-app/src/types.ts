@@ -10,7 +10,7 @@ export interface Guest {
 export interface Relationship {
   guestAId: string
   guestBId: string
-  type: 'together' | 'apart'
+  type: 'together' | 'apart' | 'plus-one'
   note: string
 }
 
