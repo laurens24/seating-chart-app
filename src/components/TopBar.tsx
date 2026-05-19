@@ -5,6 +5,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { buildJsonBlob, downloadBlob } from '../utils/exportFile'
 import { AppState, Guest, Relationship } from '../types'
 
+const WELCOME_KEY = 'seatinghelper_welcomed'
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -26,7 +28,13 @@ export function TopBar({ onToast }: Props) {
   const [showImport, setShowImport] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_KEY))
   const { guests, relationships, tables, resetChart, importState, undo, _history } = useStore()
+
+  const dismissWelcome = () => {
+    localStorage.setItem(WELCOME_KEY, '1')
+    setShowWelcome(false)
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -66,7 +74,7 @@ export function TopBar({ onToast }: Props) {
   return (
     <>
       <header className="flex items-center gap-4 px-4 py-3 bg-white border-b border-stone-200 shrink-0">
-        <span className="text-lg font-bold text-violet-600">💒 WeddingSeat</span>
+        <span className="text-lg font-bold text-violet-600">🪑 SeatingHelper</span>
         <div className="flex gap-2 ml-auto">
           <button
             onClick={undo}
@@ -81,7 +89,7 @@ export function TopBar({ onToast }: Props) {
           <button onClick={() => setShowConfirm(true)} className="btn-secondary">New Chart</button>
           <button
             onClick={() => setShowHelp(true)}
-            title="How to use WeddingSeat"
+            title="How to use SeatingHelper"
             className="w-8 h-8 flex items-center justify-center rounded-full bg-stone-200 text-stone-600 hover:bg-stone-300 hover:text-stone-900 text-sm font-bold"
           >
             ?
@@ -103,11 +111,44 @@ export function TopBar({ onToast }: Props) {
           onConfirmExport={() => { handleExport(); resetChart(); setShowConfirm(false) }}
         />
       )}
+      {showWelcome && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 flex flex-col gap-4">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🪑</div>
+              <h1 className="text-2xl font-bold text-violet-600 mb-1">Welcome to SeatingHelper</h1>
+              <p className="text-stone-500 text-sm">Plan your event seating in minutes</p>
+            </div>
+            <div className="flex flex-col gap-3 text-sm text-stone-700">
+              <div className="flex gap-3 items-start">
+                <span className="text-xl shrink-0">👥</span>
+                <div><strong className="text-stone-900">Add guests</strong> — import a list or add them one by one. Set tags, notes, and relationships like <em>together</em>, <em>apart</em>, or <em>plus-one</em>.</div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <span className="text-xl shrink-0">🍽️</span>
+                <div><strong className="text-stone-900">Set up tables</strong> — add tables to the floor plan, set capacities, and drag guests onto them to assign seats.</div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <span className="text-xl shrink-0">✨</span>
+                <div><strong className="text-stone-900">Auto-assign</strong> — hit <em>Suggest Seating</em> to fill remaining seats automatically, respecting all your relationship rules.</div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <span className="text-xl shrink-0">⚡</span>
+                <div><strong className="text-stone-900">Fix conflicts</strong> — if guests end up in the wrong seats, <em>Fix Conflicts</em> resolves them instantly.</div>
+              </div>
+            </div>
+            <p className="text-xs text-stone-400 text-center">Everything saves automatically to your browser. Hit <strong>?</strong> anytime for the full guide.</p>
+            <button onClick={dismissWelcome} className="btn-primary py-2 text-base">
+              Get started
+            </button>
+          </div>
+        </div>
+      )}
       {showHelp && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowHelp(false)}>
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-violet-600">How to use WeddingSeat</h2>
+              <h2 className="text-lg font-bold text-violet-600">How to use SeatingHelper</h2>
               <button onClick={() => setShowHelp(false)} className="text-stone-500 hover:text-stone-900 text-xl leading-none">✕</button>
             </div>
             <div className="flex flex-col gap-3 text-sm text-stone-600">
