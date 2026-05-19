@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { parseTxt, parseCsv, parseJson } from '../utils/importFile'
 import { AppState, Guest, Relationship } from '../types'
+import { useStore } from '../store/useStore'
 
 interface Props {
   onImportGuests: (guests: Guest[], relationships: Relationship[], warnings: string[]) => void
@@ -10,13 +11,43 @@ interface Props {
 
 type Mode = 'guests' | 'paste' | 'chart'
 
+interface PendingImport {
+  guests: Guest[]
+  relationships: Relationship[]
+  warnings: string[]
+  // indices into guests[] that are duplicates of existing names
+  duplicateIndices: number[]
+}
+
 export function ImportDialog({ onImportGuests, onImportState, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<Mode>('guests')
   const [pasteText, setPasteText] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState<PendingImport | null>(null)
+  const [editedNames, setEditedNames] = useState<Record<number, string>>({})
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null) }
+  const switchMode = (m: Mode) => { setMode(m); setError(null); setPending(null); setEditedNames({}) }
+
+  const checkAndStage = (guests: Guest[], relationships: Relationship[], warnings: string[]) => {
+    const existingNames = new Set(
+      useStore.getState().guests.map((g) => g.name.trim().toLowerCase())
+    )
+    const duplicateIndices = guests
+      .map((g, i) => ({ g, i }))
+      .filter(({ g }) => existingNames.has(g.name.trim().toLowerCase()))
+      .map(({ i }) => i)
+
+    if (duplicateIndices.length === 0) {
+      onImportGuests(guests, relationships, warnings)
+      return
+    }
+
+    const initEdits: Record<number, string> = {}
+    for (const i of duplicateIndices) initEdits[i] = guests[i].name
+    setEditedNames(initEdits)
+    setPending({ guests, relationships, warnings, duplicateIndices })
+  }
 
   const handleFile = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -43,7 +74,7 @@ export function ImportDialog({ onImportGuests, onImportState, onClose }: Props) 
       else { setError('Supported formats: .txt, .csv (guest list) or .json (chart export).'); return }
 
       if (result.error) { setError(result.error); return }
-      onImportGuests(result.guests, result.relationships, result.warnings)
+      checkAndStage(result.guests, result.relationships, result.warnings)
     }
     reader.readAsText(file)
   }
@@ -53,12 +84,53 @@ export function ImportDialog({ onImportGuests, onImportState, onClose }: Props) 
     if (!trimmed) { setError('Paste at least one name.'); return }
     const result = parseTxt(trimmed)
     if (result.error) { setError(result.error); return }
-    onImportGuests(result.guests, result.relationships, result.warnings)
+    checkAndStage(result.guests, result.relationships, result.warnings)
+  }
+
+  const commitWithEdits = () => {
+    if (!pending) return
+    const finalGuests = pending.guests.map((g, i) => {
+      const edited = editedNames[i]
+      return edited !== undefined ? { ...g, name: edited.trim() || g.name } : g
+    })
+    onImportGuests(finalGuests, pending.relationships, pending.warnings)
   }
 
   const accept = mode === 'chart' ? '.json' : '.txt,.csv,.json'
   const tabClass = (m: Mode) =>
     `flex-1 text-sm py-1 rounded transition-colors ${mode === m ? 'bg-violet-600 text-white' : 'text-stone-500 hover:text-stone-800'}`
+
+  if (pending) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal-panel max-w-sm w-full">
+          <h2 className="text-lg font-semibold text-stone-900 mb-1">Duplicate Names</h2>
+          <p className="text-sm text-stone-500 mb-4">
+            The following names already exist. Edit them to import as new guests, or leave them to import anyway.
+          </p>
+          <div className="flex flex-col gap-2 mb-4 max-h-64 overflow-y-auto">
+            {pending.duplicateIndices.map((i) => (
+              <div key={i}>
+                <label className="field-label mb-0.5 block">
+                  "{pending.guests[i].name}" already exists
+                </label>
+                <input
+                  className="input"
+                  value={editedNames[i] ?? pending.guests[i].name}
+                  onChange={(e) => setEditedNames((prev) => ({ ...prev, [i]: e.target.value }))}
+                  placeholder="New name"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => { setPending(null); setEditedNames({}) }} className="btn-ghost">Back</button>
+            <button onClick={commitWithEdits} className="btn-primary">Import</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="modal-backdrop">

@@ -178,6 +178,96 @@ export function suggestMoves(
   return { moves, newTables }
 }
 
+export function resolveConflicts(
+  guests: Guest[],
+  relationships: Relationship[],
+  tables: Table[]
+): SuggestResult {
+  if (tables.length === 0) return { moves: [], newTables: [] }
+
+  const guestTable = new Map<string, string | null>(guests.map((g) => [g.id, g.tableId]))
+  const tableOccupants = new Map<string, Set<string>>()
+  for (const t of tables) tableOccupants.set(t.id, new Set())
+  for (const g of guests) {
+    if (g.tableId) tableOccupants.get(g.tableId)?.add(g.id)
+  }
+  const tableCapacity = new Map(tables.map((t) => [t.id, t.capacity]))
+  const moves: SuggestedMove[] = []
+  const newTablesLocal: Table[] = []
+  const allTablesNow = () => [...tables, ...newTablesLocal]
+
+  const apartPairs = new Set(
+    relationships.filter((r) => r.type === 'apart').map((r) => `${r.guestAId}:${r.guestBId}`)
+  )
+  const isApart = (a: string, b: string) =>
+    apartPairs.has(`${a}:${b}`) || apartPairs.has(`${b}:${a}`)
+
+  const makeNewTable = (): string => {
+    const id = newId()
+    const n = tables.length + newTablesLocal.length + 1
+    const pos = nextTablePosition(allTablesNow())
+    const t: Table = { id, name: `Table ${n}`, capacity: DEFAULT_CAPACITY, position: pos, shape: 'round' }
+    newTablesLocal.push(t)
+    tableOccupants.set(id, new Set())
+    tableCapacity.set(id, DEFAULT_CAPACITY)
+    return id
+  }
+
+  const moveGuest = (guestId: string, toTableId: string) => {
+    const fromTable = guestTable.get(guestId)
+    if (fromTable) tableOccupants.get(fromTable)?.delete(guestId)
+    tableOccupants.get(toTableId)!.add(guestId)
+    guestTable.set(guestId, toTableId)
+    moves.push({ guestId, toTableId })
+  }
+
+  const canFit = (guestId: string, tableId: string): boolean => {
+    const occupants = tableOccupants.get(tableId)
+    const cap = tableCapacity.get(tableId) ?? 0
+    if (!occupants || occupants.size >= cap) return false
+    return ![...occupants].some((occ) => isApart(guestId, occ))
+  }
+
+  // Resolve apart conflicts: move the "B" guest out
+  for (const r of relationships) {
+    if (r.type !== 'apart') continue
+    const aTable = guestTable.get(r.guestAId)
+    const bTable = guestTable.get(r.guestBId)
+    if (!aTable || !bTable || aTable !== bTable) continue
+    let dest: string | null = null
+    for (const [tid] of tableOccupants) {
+      if (tid === aTable) continue
+      if (canFit(r.guestBId, tid)) { dest = tid; break }
+    }
+    moveGuest(r.guestBId, dest ?? makeNewTable())
+  }
+
+  // Resolve plus-one splits: reunite partners
+  for (const r of relationships) {
+    if (r.type !== 'plus-one') continue
+    const aTable = guestTable.get(r.guestAId)
+    const bTable = guestTable.get(r.guestBId)
+    if (!aTable || !bTable || aTable === bTable) continue
+    if (canFit(r.guestBId, aTable)) { moveGuest(r.guestBId, aTable); continue }
+    if (canFit(r.guestAId, bTable)) { moveGuest(r.guestAId, bTable); continue }
+    // Neither partner's table has room — find or create a shared table
+    let sharedTable: string | null = null
+    for (const [tid, occupants] of tableOccupants) {
+      if (tid === aTable || tid === bTable) continue
+      const cap = tableCapacity.get(tid) ?? 0
+      if (occupants.size + 2 > cap) continue
+      if ([...occupants].some((occ) => isApart(r.guestAId, occ) || isApart(r.guestBId, occ))) continue
+      sharedTable = tid
+      break
+    }
+    const dest = sharedTable ?? makeNewTable()
+    moveGuest(r.guestAId, dest)
+    moveGuest(r.guestBId, dest)
+  }
+
+  return { moves, newTables: newTablesLocal }
+}
+
 function findBestTable(
   group: string[],
   seated: Map<string, string[]>,

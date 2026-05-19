@@ -208,7 +208,7 @@ export default function App() {
       >
         <div className="flex flex-1 overflow-hidden">
           <GuestPanel />
-          <ChartPanel />
+          <ChartPanel onToast={addToast} />
         </div>
         <DragOverlay dropAnimation={null}>
           {activeSeatDrag && (
