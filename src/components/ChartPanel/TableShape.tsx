@@ -69,7 +69,9 @@ interface Props {
 }
 
 export function TableShape({ table }: Props) {
-  const { guests, relationships, hoveredTag, hoveredGuestId, setHoveredGuestId, updateTable, removeTable } = useStore()
+  const { guests, relationships, hoveredTag, hoveredGuestId, setHoveredGuestId, updateTable, removeTable, removeTables, selectedTableIds, setSelectedTableIds, tableGroupDragDelta } = useStore()
+  const isSelected = selectedTableIds.has(table.id)
+  const isMultiSelected = isSelected && selectedTableIds.size > 1
   const [isHovered, setIsHovered] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -104,8 +106,10 @@ export function TableShape({ table }: Props) {
     data: { type: 'table', tableId: table.id },
   })
 
-  const x = table.position.x + (transform?.x ?? 0)
-  const y = table.position.y + (transform?.y ?? 0)
+  // When part of a group drag (another selected table is being dragged), apply the group delta
+  const groupDelta = isSelected && !isDragging && tableGroupDragDelta ? tableGroupDragDelta : null
+  const x = table.position.x + (transform?.x ?? 0) + (groupDelta?.x ?? 0)
+  const y = table.position.y + (transform?.y ?? 0) + (groupDelta?.y ?? 0)
 
   const isRound = table.shape === 'round'
   const w = isRound ? 72 : 88
@@ -115,15 +119,18 @@ export function TableShape({ table }: Props) {
   const footprint = (LABEL_ORBIT + 20) * 2
 
   return (
-    <div style={{
-      position: 'absolute',
-      left: x - (footprint - w) / 2,
-      top: y - (footprint - h) / 2,
-      width: footprint,
-      height: footprint,
-      opacity: isDragging ? 0.5 : 1,
-      pointerEvents: 'none',
-    }}>
+    <div
+      data-table-shape
+      style={{
+        position: 'absolute',
+        left: x - (footprint - w) / 2,
+        top: y - (footprint - h) / 2,
+        width: footprint,
+        height: footprint,
+        opacity: isDragging ? 0.5 : 1,
+        pointerEvents: 'none',
+      }}
+    >
       <div
         ref={(node) => { setDragRef(node); setDropRef(node) }}
         {...attributes}
@@ -142,6 +149,7 @@ export function TableShape({ table }: Props) {
         }}
         className={`flex flex-col items-center justify-center border-2 select-none relative
           ${isOver ? 'border-green-400 bg-green-50' : isOverCapacity ? 'border-orange-400 bg-orange-50' : hasConflict ? 'border-red-500 bg-red-50' : isFull ? 'border-green-600 bg-green-50' : 'border-violet-600 bg-violet-50'}
+          ${isSelected ? 'ring-2 ring-violet-400 ring-offset-1' : ''}
         `}
       >
         {isHovered && !confirmDelete && (
@@ -246,7 +254,9 @@ export function TableShape({ table }: Props) {
             style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 50, whiteSpace: 'nowrap', pointerEvents: 'auto' }}
             className="bg-white border border-stone-200 rounded-lg shadow-xl px-3 py-2 flex flex-col items-center gap-2"
           >
-          <span className="text-xs text-stone-800">Delete {table.name}?</span>
+          <span className="text-xs text-stone-800">
+            {isMultiSelected ? `Delete ${selectedTableIds.size} tables?` : `Delete ${table.name}?`}
+          </span>
           <div className="flex gap-2">
             <button
               onClick={() => { setConfirmDelete(false); setIsHovered(false) }}
@@ -254,11 +264,26 @@ export function TableShape({ table }: Props) {
             >
               Cancel
             </button>
+            {isMultiSelected && (
+              <button
+                onClick={() => { removeTable(table.id); setSelectedTableIds(new Set()) }}
+                className="text-xs px-2 py-0.5 rounded bg-stone-400 text-white hover:bg-stone-500"
+              >
+                Just this one
+              </button>
+            )}
             <button
-              onClick={() => removeTable(table.id)}
+              onClick={() => {
+                if (isMultiSelected) {
+                  removeTables([...selectedTableIds])
+                  setSelectedTableIds(new Set())
+                } else {
+                  removeTable(table.id)
+                }
+              }}
               className="text-xs px-2 py-0.5 rounded bg-red-700 text-white hover:bg-red-600"
             >
-              Delete
+              {isMultiSelected ? `Delete all ${selectedTableIds.size}` : 'Delete'}
             </button>
           </div>
         </div>

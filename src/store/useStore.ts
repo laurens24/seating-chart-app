@@ -15,6 +15,7 @@ interface Store extends AppState {
   addTable: () => void
   updateTable: (id: string, patch: Partial<Omit<Table, 'id'>>) => void
   removeTable: (id: string) => void
+  removeTables: (ids: string[]) => void
   // assignment
   assignGuest: (guestId: string, tableId: string) => void
   unassignGuest: (guestId: string) => void
@@ -37,6 +38,10 @@ interface Store extends AppState {
   setHoveredGuestId: (id: string | null) => void
   multiSelectIds: Set<string>
   setMultiSelectIds: (ids: Set<string>) => void
+  selectedTableIds: Set<string>
+  setSelectedTableIds: (ids: Set<string>) => void
+  tableGroupDragDelta: { x: number; y: number } | null
+  setTableGroupDragDelta: (delta: { x: number; y: number } | null) => void
 }
 
 const saved = loadState()
@@ -64,6 +69,10 @@ export const useStore = create<Store>((set) => ({
   setHoveredGuestId: (id) => set({ hoveredGuestId: id }),
   multiSelectIds: new Set<string>(),
   setMultiSelectIds: (ids) => set({ multiSelectIds: ids }),
+  selectedTableIds: new Set<string>(),
+  setSelectedTableIds: (ids) => set({ selectedTableIds: ids }),
+  tableGroupDragDelta: null,
+  setTableGroupDragDelta: (delta) => set({ tableGroupDragDelta: delta }),
 
   undo: () => set((s) => {
     if (s._history.length === 0) return s
@@ -141,6 +150,17 @@ export const useStore = create<Store>((set) => ({
       ...s,
       tables: s.tables.filter((t) => t.id !== id),
       guests: s.guests.map((g) => g.tableId === id ? { ...g, tableId: null } : g),
+    }
+    debouncedSave(next)
+    return withHistory(s, next)
+  }),
+
+  removeTables: (ids) => set((s) => {
+    const idSet = new Set(ids)
+    const next = {
+      ...s,
+      tables: s.tables.filter((t) => !idSet.has(t.id)),
+      guests: s.guests.map((g) => g.tableId && idSet.has(g.tableId) ? { ...g, tableId: null } : g),
     }
     debouncedSave(next)
     return withHistory(s, next)

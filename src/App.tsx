@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, DragEndEvent, DragMoveEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { TopBar } from './components/TopBar'
 import { GuestPanel } from './components/GuestPanel/GuestPanel'
 import { ChartPanel } from './components/ChartPanel/ChartPanel'
@@ -49,6 +49,16 @@ export default function App() {
     setActiveSeatDrag(null)
     setSeatDragOverTable(false)
     setActiveTagDrag(null)
+    useStore.getState().setTableGroupDragDelta(null)
+  }, [])
+
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    if (!String(event.active.id).startsWith('table-')) return
+    const { selectedTableIds, setTableGroupDragDelta } = useStore.getState()
+    const tableId = (event.active.data.current as { tableId: string }).tableId
+    if (selectedTableIds.size > 1 && selectedTableIds.has(tableId)) {
+      setTableGroupDragDelta({ x: event.delta.x, y: event.delta.y })
+    }
   }, [])
 
   const assignWithPlusOne = useCallback((guestId: string, tableId: string) => {
@@ -165,15 +175,22 @@ export default function App() {
     // Moving a table on the floor plan
     if (String(active.id).startsWith('table-') && !String(active.id).startsWith('table-drop-')) {
       const tableId = (active.data.current as { tableId: string }).tableId
-      const { tables, updateTable } = useStore.getState()
-      const table = tables.find((t) => t.id === tableId)
-      if (table) {
-        updateTable(tableId, {
-          position: {
-            x: Math.max(0, table.position.x + delta.x),
-            y: Math.max(0, table.position.y + delta.y),
-          },
-        })
+      const { tables, updateTable, selectedTableIds, setTableGroupDragDelta } = useStore.getState()
+      setTableGroupDragDelta(null)
+      // Move all selected tables together if the dragged table is part of the selection
+      const idsToMove = selectedTableIds.size > 1 && selectedTableIds.has(tableId)
+        ? [...selectedTableIds]
+        : [tableId]
+      for (const id of idsToMove) {
+        const t = tables.find((tbl) => tbl.id === id)
+        if (t) {
+          updateTable(id, {
+            position: {
+              x: Math.max(0, t.position.x + delta.x),
+              y: Math.max(0, t.position.y + delta.y),
+            },
+          })
+        }
       }
       return
     }
@@ -202,6 +219,7 @@ export default function App() {
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragOver={handleDragOver}
         onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
