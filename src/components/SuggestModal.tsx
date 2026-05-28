@@ -8,8 +8,8 @@ interface Props {
 }
 
 export function SuggestModal({ onClose }: Props) {
-  const { guests, relationships, tables, applyMoves } = useStore()
-  const [{ moves, newTables }] = useState(() => suggestMoves(guests, relationships, tables))
+  const { guests, relationships, tables, applyMoves, defaultTableCapacity } = useStore()
+  const [{ moves, newTables }] = useState(() => suggestMoves(guests, relationships, tables, defaultTableCapacity))
   const [index, setIndex] = useState<number | null>(null) // null = show all
   const [_skipped, setSkipped] = useState<Set<number>>(new Set())
   // Track which new tables have already been committed so we don't insert duplicates

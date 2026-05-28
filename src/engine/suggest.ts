@@ -24,10 +24,90 @@ export interface SuggestResult {
   newTables: Table[]
 }
 
+function nameNewTables(
+  newTables: Table[],
+  moves: SuggestedMove[],
+  guests: Guest[],
+  relationships: Relationship[],
+  existingTables: Table[]
+): void {
+  if (newTables.length === 0) return
+
+  const guestById = new Map(guests.map((g) => [g.id, g]))
+
+  const plusOnePartners = new Map<string, Set<string>>()
+  for (const r of relationships) {
+    if (r.type !== 'plus-one') continue
+    if (!plusOnePartners.has(r.guestAId)) plusOnePartners.set(r.guestAId, new Set())
+    if (!plusOnePartners.has(r.guestBId)) plusOnePartners.set(r.guestBId, new Set())
+    plusOnePartners.get(r.guestAId)!.add(r.guestBId)
+    plusOnePartners.get(r.guestBId)!.add(r.guestAId)
+  }
+
+  // A guest qualifies for a tag if they have it directly, or any plus-one partner has it
+  const qualifies = (guestId: string, tag: string): boolean => {
+    const g = guestById.get(guestId)
+    if (!g) return false
+    if (g.tags.includes(tag)) return true
+    for (const partnerId of (plusOnePartners.get(guestId) ?? [])) {
+      if (guestById.get(partnerId)?.tags.includes(tag)) return true
+    }
+    return false
+  }
+
+  const tagNames: (string | null)[] = newTables.map((table) => {
+    const guestIds = moves.filter((m) => m.toTableId === table.id).map((m) => m.guestId)
+    if (guestIds.length === 0) return null
+
+    const candidateTags = new Set<string>()
+    for (const gid of guestIds) {
+      for (const tag of (guestById.get(gid)?.tags ?? [])) candidateTags.add(tag)
+      for (const partnerId of (plusOnePartners.get(gid) ?? [])) {
+        for (const tag of (guestById.get(partnerId)?.tags ?? [])) candidateTags.add(tag)
+      }
+    }
+
+    let bestTag: string | null = null
+    let bestScore = -1
+    for (const tag of candidateTags) {
+      if (!guestIds.every((gid) => qualifies(gid, tag))) continue
+      const directCount = guestIds.filter((gid) => guestById.get(gid)?.tags.includes(tag)).length
+      if (directCount > bestScore) { bestScore = directCount; bestTag = tag }
+    }
+    return bestTag
+  })
+
+  const newTagCount = new Map<string, number>()
+  for (const tag of tagNames) {
+    if (tag) newTagCount.set(tag, (newTagCount.get(tag) ?? 0) + 1)
+  }
+
+  const existingCount = (tag: string) =>
+    existingTables.filter((t) =>
+      t.name === tag || new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\d+$`).test(t.name)
+    ).length
+
+  const tagOffset = new Map<string, number>()
+  for (let i = 0; i < newTables.length; i++) {
+    const tag = tagNames[i]
+    if (!tag) continue
+    const existing = existingCount(tag)
+    const total = (newTagCount.get(tag) ?? 0) + existing
+    if (total === 1) {
+      newTables[i].name = tag
+    } else {
+      const next = (tagOffset.get(tag) ?? existing) + 1
+      tagOffset.set(tag, next)
+      newTables[i].name = `${tag} ${next}`
+    }
+  }
+}
+
 export function suggestMoves(
   guests: Guest[],
   relationships: Relationship[],
-  tables: Table[]
+  tables: Table[],
+  defaultCapacity: number = DEFAULT_CAPACITY
 ): SuggestResult {
   const unassigned = guests.filter((g) => g.tableId === null)
   if (unassigned.length === 0) return { moves: [], newTables: [] }
@@ -146,7 +226,7 @@ export function suggestMoves(
   const allTables = () => [...tables, ...newTables]
 
   const addNewTable = (neededSeats: number): string => {
-    const cap = Math.max(DEFAULT_CAPACITY, neededSeats)
+    const cap = Math.max(defaultCapacity, neededSeats)
     const id = newId()
     const n = tables.length + newTables.length + 1
     const pos = nextTablePosition(allTables())
@@ -175,13 +255,15 @@ export function suggestMoves(
     }
   }
 
+  nameNewTables(newTables, moves, guests, relationships, tables)
   return { moves, newTables }
 }
 
 export function resolveConflicts(
   guests: Guest[],
   relationships: Relationship[],
-  tables: Table[]
+  tables: Table[],
+  defaultCapacity: number = DEFAULT_CAPACITY
 ): SuggestResult {
   if (tables.length === 0) return { moves: [], newTables: [] }
 
@@ -206,10 +288,10 @@ export function resolveConflicts(
     const id = newId()
     const n = tables.length + newTablesLocal.length + 1
     const pos = nextTablePosition(allTablesNow())
-    const t: Table = { id, name: `Table ${n}`, capacity: DEFAULT_CAPACITY, position: pos, shape: 'round' }
+    const t: Table = { id, name: `Table ${n}`, capacity: defaultCapacity, position: pos, shape: 'round' }
     newTablesLocal.push(t)
     tableOccupants.set(id, new Set())
-    tableCapacity.set(id, DEFAULT_CAPACITY)
+    tableCapacity.set(id, defaultCapacity)
     return id
   }
 

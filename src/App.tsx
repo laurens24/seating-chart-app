@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { DndContext, DragEndEvent, DragMoveEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, DragEndEvent, DragMoveEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, pointerWithin, useSensor, useSensors, type Modifier } from '@dnd-kit/core'
 import { TopBar } from './components/TopBar'
 import { GuestPanel } from './components/GuestPanel/GuestPanel'
 import { ChartPanel } from './components/ChartPanel/ChartPanel'
@@ -10,6 +10,16 @@ import { useStore } from './store/useStore'
 
 const TABLE_DROP_PREFIXES = ['table-drop-', 'tablelist-drop-']
 const isTableDrop = (id: string) => TABLE_DROP_PREFIXES.some((p) => id.startsWith(p))
+
+const centerUnderCursor: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
+  if (!draggingNodeRect || !activatorEvent) return transform
+  const { clientX, clientY } = activatorEvent as PointerEvent
+  return {
+    ...transform,
+    x: transform.x + clientX - draggingNodeRect.left - draggingNodeRect.width / 2,
+    y: transform.y + clientY - draggingNodeRect.top - draggingNodeRect.height / 2,
+  }
+}
 
 export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
@@ -37,11 +47,19 @@ export default function App() {
       setSeatDragOverTable(false)
     } else if (id.startsWith('tag-')) {
       setActiveTagDrag((event.active.data.current as { tag: string }).tag)
+    } else {
+      // Plain guest row drag from the guest panel
+      const guestName = useStore.getState().guests.find((g) => g.id === id)?.name ?? ''
+      if (guestName) {
+        setActiveSeatDrag({ guestId: id, guestName })
+        setSeatDragOverTable(false)
+      }
     }
   }, [])
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
-    if (!String(event.active.id).startsWith('seated-')) return
+    const id = String(event.active.id)
+    if (!id.startsWith('seated-') && !useStore.getState().guests.some((g) => g.id === id)) return
     setSeatDragOverTable(!!event.over && isTableDrop(String(event.over.id)))
   }, [])
 
@@ -215,9 +233,10 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-stone-50 text-stone-900 overflow-hidden">
-      <TopBar onToast={addToast} />
+      <TopBar />
       <DndContext
         sensors={sensors}
+        collisionDetection={pointerWithin}
         onDragStart={handleDragStart}
         onDragMove={handleDragMove}
         onDragOver={handleDragOver}
@@ -225,12 +244,12 @@ export default function App() {
         onDragEnd={handleDragEnd}
       >
         <div className="flex flex-1 overflow-hidden">
-          <GuestPanel />
+          <GuestPanel onToast={addToast} />
           <ChartPanel onToast={addToast} />
         </div>
-        <DragOverlay dropAnimation={null}>
+        <DragOverlay dropAnimation={null} modifiers={activeSeatDrag ? [centerUnderCursor] : []}>
           {activeSeatDrag && (
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shadow-lg select-none pointer-events-none whitespace-nowrap
+            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shadow-lg select-none pointer-events-none whitespace-nowrap w-fit
               ${seatDragOverTable
                 ? 'bg-violet-600 text-white ring-1 ring-violet-500'
                 : 'bg-red-700 text-white ring-1 ring-red-500'

@@ -74,7 +74,7 @@ function GuestArrow({ scroll, vpSize }: { scroll: { x: number; y: number }; vpSi
 }
 
 export function FloorPlan() {
-  const { tables, addTable, setSelectedTableIds } = useStore()
+  const { tables, addTable, setSelectedTableIds, defaultTableCapacity, setDefaultTableCapacity } = useStore()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scroll, setScroll] = useState({ x: 0, y: 0 })
   const [vpSize, setVpSize] = useState({ w: 0, h: 0 })
@@ -214,12 +214,25 @@ export function FloorPlan() {
       </div>
       <GuestArrow scroll={scroll} vpSize={vpSize} />
 
-      <button
-        onClick={addTable}
-        className="btn-primary absolute bottom-4 left-4 z-20"
-      >
-        + Add Table
-      </button>
+      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
+        <button onClick={addTable} className="btn-primary">
+          + Add Table
+        </button>
+        <div className="flex items-center gap-1 bg-white border border-stone-200 rounded px-2 py-1 shadow-sm">
+          <label className="text-xs text-stone-500 select-none">Default seats</label>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={defaultTableCapacity}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10)
+              if (!isNaN(n) && n >= 1 && n <= 50) setDefaultTableCapacity(n)
+            }}
+            className="w-10 text-xs text-center border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 py-0.5"
+          />
+        </div>
+      </div>
 
       <div
         className="absolute bottom-4 right-4 z-20 rounded border border-stone-300 bg-stone-50 overflow-hidden cursor-crosshair select-none"

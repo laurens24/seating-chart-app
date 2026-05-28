@@ -8,10 +8,66 @@ interface ParseResult {
   error?: string
 }
 
-// Splits "Alice & Bob" or "Alice and Bob" into two names, or returns null.
+// Splits "Alice & Bob", "Alice + Bob", or "Alice and Bob" into two names, or returns null.
 function splitCouple(raw: string): [string, string] | null {
-  const m = raw.match(/^(.+?)\s+(?:&|and)\s+(.+)$/i)
+  const m = raw.match(/^(.+?)\s+(?:&|\+|and)\s+(.+)$/i)
   return m ? [m[1].trim(), m[2].trim()] : null
+}
+
+// If one name has a last name and the other doesn't, copy the last name across.
+function inferLastName(a: string, b: string): [string, string] {
+  const aWords = a.split(/\s+/)
+  const bWords = b.split(/\s+/)
+  if (aWords.length > 1 && bWords.length === 1) return [a, b + ' ' + aWords[aWords.length - 1]]
+  if (bWords.length > 1 && aWords.length === 1) return [a + ' ' + bWords[bWords.length - 1], b]
+  return [a, b]
+}
+
+// Given a list of plus-one pairs (by guest ID), returns all relationships needed —
+// including inferred ones for families (connected components of size > 2).
+function buildPlusOneRelationships(plusOnePairs: [string, string][]): Relationship[] {
+  if (plusOnePairs.length === 0) return []
+
+  const allIds = new Set<string>()
+  for (const [a, b] of plusOnePairs) { allIds.add(a); allIds.add(b) }
+
+  const parent = new Map<string, string>()
+  for (const id of allIds) parent.set(id, id)
+  const find = (x: string): string => {
+    if (parent.get(x) === x) return x
+    const root = find(parent.get(x)!)
+    parent.set(x, root)
+    return root
+  }
+  for (const [a, b] of plusOnePairs) parent.set(find(a), find(b))
+
+  const components = new Map<string, string[]>()
+  for (const id of allIds) {
+    const root = find(id)
+    if (!components.has(root)) components.set(root, [])
+    components.get(root)!.push(id)
+  }
+
+  const relationships: Relationship[] = []
+  const added = new Set<string>()
+  const pairKey = (a: string, b: string) => (a < b ? `${a}:${b}` : `${b}:${a}`)
+
+  for (const [a, b] of plusOnePairs) {
+    const k = pairKey(a, b)
+    if (!added.has(k)) { added.add(k); relationships.push({ guestAId: a, guestBId: b, type: 'plus-one', note: '' }) }
+  }
+
+  for (const members of components.values()) {
+    if (members.length <= 2) continue
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const k = pairKey(members[i], members[j])
+        if (!added.has(k)) { added.add(k); relationships.push({ guestAId: members[i], guestBId: members[j], type: 'plus-one', note: '' }) }
+      }
+    }
+  }
+
+  return relationships
 }
 
 interface AppStateParseResult {
@@ -21,17 +77,12 @@ interface AppStateParseResult {
 
 export function parseJson(content: string): AppStateParseResult | ParseResult {
   let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
+  try { parsed = JSON.parse(content) } catch {
     return { guests: [], relationships: [], warnings: [], error: 'Invalid JSON file.' }
   }
   if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    'guests' in parsed &&
-    'relationships' in parsed &&
-    'tables' in parsed
+    parsed !== null && typeof parsed === 'object' &&
+    'guests' in parsed && 'relationships' in parsed && 'tables' in parsed
   ) {
     const state = parsed as AppState
     if (!Array.isArray(state.guests) || !Array.isArray(state.relationships) || !Array.isArray(state.tables)) {
@@ -44,33 +95,23 @@ export function parseJson(content: string): AppStateParseResult | ParseResult {
 
 export function parseTxt(content: string): ParseResult {
   const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
-  const names = new Set<string>()
-  const warnings: string[] = []
   const guests: Guest[] = []
-  const relationships: Relationship[] = []
+  const plusOnePairs: [string, string][] = []
 
   for (const line of lines) {
     const couple = splitCouple(line)
     if (couple) {
-      const [nameA, nameB] = couple
-      const idA = newId()
-      const idB = newId()
-      for (const name of [nameA, nameB]) {
-        if (names.has(name)) { warnings.push(`Duplicate name skipped: "${name}"`); continue }
-        names.add(name)
-      }
-      const gA: Guest = { id: idA, name: nameA, tags: [], notes: '', tableId: null }
-      const gB: Guest = { id: idB, name: nameB, tags: [], notes: '', tableId: null }
+      const [nameA, nameB] = inferLastName(...couple)
+      const gA: Guest = { id: newId(), name: nameA, tags: [], notes: '', tableId: null }
+      const gB: Guest = { id: newId(), name: nameB, tags: [], notes: '', tableId: null }
       guests.push(gA, gB)
-      relationships.push({ guestAId: idA, guestBId: idB, type: 'plus-one', note: '' })
+      plusOnePairs.push([gA.id, gB.id])
     } else {
-      if (names.has(line)) { warnings.push(`Duplicate name skipped: "${line}"`); continue }
-      names.add(line)
       guests.push({ id: newId(), name: line, tags: [], notes: '', tableId: null })
     }
   }
 
-  return { guests, relationships, warnings }
+  return { guests, relationships: buildPlusOneRelationships(plusOnePairs), warnings: [] }
 }
 
 export function parseCsv(content: string): ParseResult {
@@ -86,10 +127,8 @@ export function parseCsv(content: string): ParseResult {
   const tagsIdx = headers.indexOf('tags')
   const notesIdx = headers.indexOf('notes')
 
-  const names = new Set<string>()
-  const warnings: string[] = []
   const guests: Guest[] = []
-  const relationships: Relationship[] = []
+  const plusOnePairs: [string, string][] = []
 
   for (const line of lines.slice(1)) {
     const cols = splitCsvLine(line)
@@ -101,26 +140,17 @@ export function parseCsv(content: string): ParseResult {
 
     const couple = splitCouple(rawName)
     if (couple) {
-      const [nameA, nameB] = couple
-      const idA = newId()
-      const idB = newId()
-      for (const name of [nameA, nameB]) {
-        if (names.has(name)) { warnings.push(`Duplicate name skipped: "${name}"`); continue }
-        names.add(name)
-      }
-      guests.push(
-        { id: idA, name: nameA, tags, notes, tableId: null },
-        { id: idB, name: nameB, tags, notes, tableId: null },
-      )
-      relationships.push({ guestAId: idA, guestBId: idB, type: 'plus-one', note: '' })
+      const [nameA, nameB] = inferLastName(...couple)
+      const gA: Guest = { id: newId(), name: nameA, tags, notes, tableId: null }
+      const gB: Guest = { id: newId(), name: nameB, tags, notes, tableId: null }
+      guests.push(gA, gB)
+      plusOnePairs.push([gA.id, gB.id])
     } else {
-      if (names.has(rawName)) { warnings.push(`Duplicate name skipped: "${rawName}"`); continue }
-      names.add(rawName)
       guests.push({ id: newId(), name: rawName, tags, notes, tableId: null })
     }
   }
 
-  return { guests, relationships, warnings }
+  return { guests, relationships: buildPlusOneRelationships(plusOnePairs), warnings: [] }
 }
 
 function splitCsvLine(line: string): string[] {

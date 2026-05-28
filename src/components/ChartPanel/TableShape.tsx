@@ -112,8 +112,9 @@ export function TableShape({ table }: Props) {
   const y = table.position.y + (transform?.y ?? 0) + (groupDelta?.y ?? 0)
 
   const isRound = table.shape === 'round'
-  const w = isRound ? 72 : 88
-  const h = isRound ? 72 : 56
+  const baseSize = Math.round(96 * Math.sqrt(table.capacity / 8))
+  const w = isRound ? baseSize : Math.round(baseSize * 1.2)
+  const h = isRound ? baseSize : Math.round(baseSize * 0.75)
 
   const angles = seated.map((_, i) => -90 + (360 / Math.max(seated.length, 1)) * i)
   const footprint = (LABEL_ORBIT + 20) * 2

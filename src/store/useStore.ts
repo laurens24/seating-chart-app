@@ -16,6 +16,8 @@ interface Store extends AppState {
   updateTable: (id: string, patch: Partial<Omit<Table, 'id'>>) => void
   removeTable: (id: string) => void
   removeTables: (ids: string[]) => void
+  defaultTableCapacity: number
+  setDefaultTableCapacity: (n: number) => void
   // assignment
   assignGuest: (guestId: string, tableId: string) => void
   unassignGuest: (guestId: string) => void
@@ -73,6 +75,8 @@ export const useStore = create<Store>((set) => ({
   setSelectedTableIds: (ids) => set({ selectedTableIds: ids }),
   tableGroupDragDelta: null,
   setTableGroupDragDelta: (delta) => set({ tableGroupDragDelta: delta }),
+  defaultTableCapacity: 8,
+  setDefaultTableCapacity: (n) => set({ defaultTableCapacity: n }),
 
   undo: () => set((s) => {
     if (s._history.length === 0) return s
@@ -128,7 +132,7 @@ export const useStore = create<Store>((set) => ({
       tables: [...s.tables, {
         id: newId(),
         name: `Table ${n}`,
-        capacity: 8,
+        capacity: s.defaultTableCapacity,
         position,
         shape: 'round' as const,
       }],

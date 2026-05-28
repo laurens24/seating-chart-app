@@ -13,14 +13,14 @@ interface Props {
 export function ChartPanel({ onToast }: Props) {
   const [tab, setTab] = useState<'floorplan' | 'tablelist'>('floorplan')
   const [showSuggest, setShowSuggest] = useState(false)
-  const { guests, relationships, tables, applyMoves } = useStore()
+  const { guests, relationships, tables, applyMoves, defaultTableCapacity } = useStore()
 
   const hasConflicts =
     tables.some((t) => findTableConflicts(t.id, guests, relationships).length > 0) ||
     guests.some((g) => g.tableId !== null && hasGuestPlusOneConflict(g.id, guests, relationships))
 
   const handleFixConflicts = () => {
-    const { moves, newTables } = resolveConflicts(guests, relationships, tables)
+    const { moves, newTables } = resolveConflicts(guests, relationships, tables, defaultTableCapacity)
     if (moves.length === 0) {
       onToast('info', 'No conflicts to resolve.')
       return

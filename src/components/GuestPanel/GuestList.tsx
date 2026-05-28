@@ -1,11 +1,12 @@
 // src/components/GuestPanel/GuestList.tsx
 import { useState, useEffect, useRef } from 'react'
-import { Guest } from '../../types'
+import { AppState, Guest, Relationship } from '../../types'
 import { useStore } from '../../store/useStore'
 import { GuestSearch } from './GuestSearch'
 import { GuestRow } from './GuestRow'
 import { GuestEditor } from './GuestEditor'
 import { TagInput } from './TagInput'
+import { ImportDialog } from '../ImportDialog'
 
 function sortWithPlusOnes(guests: Guest[], allRelationships: ReturnType<typeof useStore.getState>['relationships']): Guest[] {
   const plusOnePairs = new Map<string, string>() // plusOneId -> primaryId
@@ -41,8 +42,12 @@ function sortWithPlusOnes(guests: Guest[], allRelationships: ReturnType<typeof u
 
 type AssignFilter = 'all' | 'assigned' | 'unassigned'
 
-export function GuestList() {
-  const { guests, relationships, addGuest, updateGuest, removeGuests, unassignGuests, setMultiSelectIds } = useStore()
+interface Props {
+  onToast: (type: 'info' | 'warning' | 'error', message: string) => void
+}
+
+export function GuestList({ onToast }: Props) {
+  const { guests, relationships, addGuest, updateGuest, removeGuests, unassignGuests, setMultiSelectIds, importState } = useStore()
   const allTags = Array.from(new Set(guests.flatMap((g) => g.tags))).sort()
   const [search, setSearch] = useState('')
   const [assignFilter, setAssignFilter] = useState<AssignFilter>('all')
@@ -51,7 +56,25 @@ export function GuestList() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [lastCheckedId, setLastCheckedId] = useState<string | null>(null)
   const [tagInput, setTagInput] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+
+  const handleImportGuests = (newGuests: Guest[], newRelationships: Relationship[], warnings: string[]) => {
+    const { guests: current, relationships: currentRel, tables: currentTables } = useStore.getState()
+    importState({ guests: [...current, ...newGuests], relationships: [...currentRel, ...newRelationships], tables: currentTables })
+    setShowImport(false)
+    if (warnings.length > 0) {
+      onToast('warning', warnings.join(' '))
+    } else {
+      onToast('info', `Imported ${newGuests.length} guest${newGuests.length !== 1 ? 's' : ''}.`)
+    }
+  }
+
+  const handleImportState = (state: AppState) => {
+    importState(state)
+    setShowImport(false)
+    onToast('info', `Chart restored: ${state.guests.length} guests, ${state.tables.length} tables.`)
+  }
 
   useEffect(() => { setMultiSelectIds(checkedIds) }, [checkedIds, setMultiSelectIds])
 
@@ -246,11 +269,21 @@ export function GuestList() {
           </p>
         )}
       </div>
-      <div className="px-3 py-3 shrink-0 border-t border-stone-200">
-        <button onClick={handleAddGuest} className="btn-primary w-full py-2">
+      <div className="px-3 py-3 shrink-0 border-t border-stone-200 flex gap-2">
+        <button onClick={handleAddGuest} className="btn-primary flex-1 py-2">
           + Add Guest
         </button>
+        <button onClick={() => setShowImport(true)} className="btn-secondary flex-1 py-2">
+          + Add Multiple Guests
+        </button>
       </div>
+      {showImport && (
+        <ImportDialog
+          onImportGuests={handleImportGuests}
+          onImportState={handleImportState}
+          onClose={() => setShowImport(false)}
+        />
+      )}
     </div>
   )
 }
