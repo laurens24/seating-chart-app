@@ -2,7 +2,8 @@
 import { create } from 'zustand'
 import { Guest, Table, AppState } from '../types'
 import { newId } from '../utils/ids'
-import { saveState, loadState, debounce } from './persistence'
+import { saveState, loadState, debounce, migrate } from './persistence'
+import { middleDropInsertIndex } from '../engine/seating'
 
 const debouncedSave = debounce((state: AppState) => saveState(state), 500)
 
@@ -19,20 +20,30 @@ interface Store extends AppState {
   defaultTableCapacity: number
   setDefaultTableCapacity: (n: number) => void
   // assignment
-  assignGuest: (guestId: string, tableId: string) => void
+  assignGuest: (guestId: string, tableId: string, insertIndex?: number) => void
   unassignGuest: (guestId: string) => void
+  reorderSeat: (tableId: string, guestId: string, toIndex: number) => void
   // relationships
   addRelationship: (guestAId: string, guestBId: string, type: 'together' | 'apart' | 'plus-one', note: string) => void
   removeRelationship: (guestAId: string, guestBId: string) => void
   // bulk
   unassignGuests: (guestIds: string[]) => void
   removeGuests: (guestIds: string[]) => void
-  applyMoves: (moves: Array<{ guestId: string; toTableId: string }>, newTables?: Table[]) => void
+  applyMoves: (
+    moves: Array<{ guestId: string; toTableId: string; insertIndex?: number }>,
+    newTables?: Table[],
+    tableRenames?: Array<{ tableId: string; newName: string }>,
+  ) => void
   resetChart: () => void
   importState: (state: AppState) => void
   // history
   _history: AppState[]
+  _future: AppState[]
   undo: () => void
+  redo: () => void
+  // dark mode
+  darkMode: boolean
+  toggleDarkMode: () => void
   // ephemeral UI
   hoveredTag: string | null
   setHoveredTag: (tag: string | null) => void
@@ -44,6 +55,8 @@ interface Store extends AppState {
   setSelectedTableIds: (ids: Set<string>) => void
   tableGroupDragDelta: { x: number; y: number } | null
   setTableGroupDragDelta: (delta: { x: number; y: number } | null) => void
+  orbitInsertHint: { tableId: string; index: number } | null
+  setOrbitInsertHint: (hint: { tableId: string; index: number } | null) => void
 }
 
 const saved = loadState()
@@ -59,12 +72,21 @@ function withHistory(s: Store, next: AppState): Partial<Store> {
   return {
     ...next,
     _history: [...s._history, snapshot(s)].slice(-HISTORY_LIMIT),
+    _future: [],
   }
 }
 
 export const useStore = create<Store>((set) => ({
   ...initial,
   _history: [],
+  _future: [],
+  darkMode: localStorage.getItem('seatinghelper_dark') === '1',
+  toggleDarkMode: () => set((s) => {
+    const next = !s.darkMode
+    localStorage.setItem('seatinghelper_dark', next ? '1' : '0')
+    document.documentElement.classList.toggle('dark', next)
+    return { darkMode: next }
+  }),
   hoveredTag: null,
   setHoveredTag: (tag) => set({ hoveredTag: tag }),
   hoveredGuestId: null,
@@ -75,15 +97,23 @@ export const useStore = create<Store>((set) => ({
   setSelectedTableIds: (ids) => set({ selectedTableIds: ids }),
   tableGroupDragDelta: null,
   setTableGroupDragDelta: (delta) => set({ tableGroupDragDelta: delta }),
+  orbitInsertHint: null,
+  setOrbitInsertHint: (hint) => set({ orbitInsertHint: hint }),
   defaultTableCapacity: 8,
   setDefaultTableCapacity: (n) => set({ defaultTableCapacity: n }),
 
   undo: () => set((s) => {
     if (s._history.length === 0) return s
     const prev = s._history[s._history.length - 1]
-    const next = { ...prev, _history: s._history.slice(0, -1) }
     debouncedSave(prev)
-    return next
+    return { ...prev, _history: s._history.slice(0, -1), _future: [snapshot(s), ...s._future].slice(0, HISTORY_LIMIT) }
+  }),
+
+  redo: () => set((s) => {
+    if (s._future.length === 0) return s
+    const next = s._future[0]
+    debouncedSave(next)
+    return { ...next, _history: [...s._history, snapshot(s)].slice(-HISTORY_LIMIT), _future: s._future.slice(1) }
   }),
 
   addGuest: (name) => set((s) => {
@@ -103,6 +133,7 @@ export const useStore = create<Store>((set) => ({
       ...s,
       guests: s.guests.filter((g) => g.id !== id),
       relationships: s.relationships.filter((r) => r.guestAId !== id && r.guestBId !== id),
+      tables: s.tables.map((t) => t.seatOrder.includes(id) ? { ...t, seatOrder: t.seatOrder.filter((sid) => sid !== id) } : t),
     }
     debouncedSave(next)
     return withHistory(s, next)
@@ -135,6 +166,7 @@ export const useStore = create<Store>((set) => ({
         capacity: s.defaultTableCapacity,
         position,
         shape: 'round' as const,
+        seatOrder: [],
       }],
     }
     debouncedSave(next)
@@ -170,21 +202,55 @@ export const useStore = create<Store>((set) => ({
     return withHistory(s, next)
   }),
 
-  assignGuest: (guestId, tableId) => set((s) => {
-    const next = { ...s, guests: s.guests.map((g) => g.id === guestId ? { ...g, tableId } : g) }
+  assignGuest: (guestId, tableId, insertIndex) => set((s) => {
+    const guest = s.guests.find((g) => g.id === guestId)
+    if (!guest) return s
+    const fromTableId = guest.tableId
+    const tables = s.tables.map((t) => {
+      if (t.id === fromTableId && t.id !== tableId) {
+        return { ...t, seatOrder: t.seatOrder.filter((id) => id !== guestId) }
+      }
+      if (t.id === tableId) {
+        const without = t.seatOrder.filter((id) => id !== guestId)
+        const idx = insertIndex !== undefined
+          ? Math.max(0, Math.min(insertIndex, without.length))
+          : middleDropInsertIndex(guestId, without, s.relationships)
+        const seatOrder = [...without.slice(0, idx), guestId, ...without.slice(idx)]
+        return { ...t, seatOrder }
+      }
+      return t
+    })
+    const guests = s.guests.map((g) => g.id === guestId ? { ...g, tableId } : g)
+    const next = { ...s, guests, tables }
     debouncedSave(next)
     return withHistory(s, next)
   }),
 
   unassignGuest: (guestId) => set((s) => {
-    const next = { ...s, guests: s.guests.map((g) => g.id === guestId ? { ...g, tableId: null } : g) }
+    const guests = s.guests.map((g) => g.id === guestId ? { ...g, tableId: null } : g)
+    const tables = s.tables.map((t) => t.seatOrder.includes(guestId) ? { ...t, seatOrder: t.seatOrder.filter((id) => id !== guestId) } : t)
+    const next = { ...s, guests, tables }
     debouncedSave(next)
     return withHistory(s, next)
   }),
 
   unassignGuests: (guestIds) => set((s) => {
     const ids = new Set(guestIds)
-    const next = { ...s, guests: s.guests.map((g) => ids.has(g.id) ? { ...g, tableId: null } : g) }
+    const guests = s.guests.map((g) => ids.has(g.id) ? { ...g, tableId: null } : g)
+    const tables = s.tables.map((t) => t.seatOrder.some((sid) => ids.has(sid)) ? { ...t, seatOrder: t.seatOrder.filter((sid) => !ids.has(sid)) } : t)
+    const next = { ...s, guests, tables }
+    debouncedSave(next)
+    return withHistory(s, next)
+  }),
+
+  reorderSeat: (tableId, guestId, toIndex) => set((s) => {
+    const tables = s.tables.map((t) => {
+      if (t.id !== tableId) return t
+      const without = t.seatOrder.filter((id) => id !== guestId)
+      const idx = Math.max(0, Math.min(toIndex, without.length))
+      return { ...t, seatOrder: [...without.slice(0, idx), guestId, ...without.slice(idx)] }
+    })
+    const next = { ...s, tables }
     debouncedSave(next)
     return withHistory(s, next)
   }),
@@ -195,6 +261,7 @@ export const useStore = create<Store>((set) => ({
       ...s,
       guests: s.guests.filter((g) => !ids.has(g.id)),
       relationships: s.relationships.filter((r) => !ids.has(r.guestAId) && !ids.has(r.guestBId)),
+      tables: s.tables.map((t) => t.seatOrder.some((sid) => ids.has(sid)) ? { ...t, seatOrder: t.seatOrder.filter((sid) => !ids.has(sid)) } : t),
     }
     debouncedSave(next)
     return withHistory(s, next)
@@ -223,12 +290,50 @@ export const useStore = create<Store>((set) => ({
     return withHistory(s, next)
   }),
 
-  applyMoves: (moves, newTables = []) => set((s) => {
-    let guests = s.guests
-    for (const { guestId, toTableId } of moves) {
-      guests = guests.map((g) => g.id === guestId ? { ...g, tableId: toTableId } : g)
+  applyMoves: (moves, newTables = [], tableRenames = []) => set((s) => {
+    const guestById = new Map(s.guests.map((g) => [g.id, g]))
+    // Build working seatOrder per existing + new table.
+    const workingSeats = new Map<string, string[]>()
+    for (const t of s.tables) workingSeats.set(t.id, [...t.seatOrder])
+    for (const t of newTables) workingSeats.set(t.id, Array.isArray(t.seatOrder) ? [...t.seatOrder] : [])
+    // Track each guest's currently-resolved tableId as we replay moves.
+    const currentTableForGuest = new Map<string, string | null>()
+    for (const g of s.guests) currentTableForGuest.set(g.id, g.tableId)
+
+    for (const m of moves) {
+      const guest = guestById.get(m.guestId)
+      if (!guest) continue
+      const fromTableId = currentTableForGuest.get(m.guestId) ?? null
+      if (fromTableId && fromTableId !== m.toTableId) {
+        const fromSeats = workingSeats.get(fromTableId)
+        if (fromSeats) workingSeats.set(fromTableId, fromSeats.filter((id) => id !== m.guestId))
+      }
+      const toSeats = workingSeats.get(m.toTableId) ?? []
+      const without = toSeats.filter((id) => id !== m.guestId)
+      const idx = m.insertIndex !== undefined
+        ? Math.max(0, Math.min(m.insertIndex, without.length))
+        : middleDropInsertIndex(m.guestId, without, s.relationships)
+      workingSeats.set(m.toTableId, [...without.slice(0, idx), m.guestId, ...without.slice(idx)])
+      currentTableForGuest.set(m.guestId, m.toTableId)
     }
-    const next = { ...s, guests, tables: [...s.tables, ...newTables] }
+
+    const guests = s.guests.map((g) => {
+      const next = currentTableForGuest.get(g.id)
+      return next === g.tableId ? g : { ...g, tableId: next ?? null }
+    })
+
+    const renameById = new Map(tableRenames.map((r) => [r.tableId, r.newName]))
+    const updatedExisting = s.tables.map((t) => {
+      const seatOrder = workingSeats.get(t.id) ?? t.seatOrder
+      const name = renameById.has(t.id) ? renameById.get(t.id)! : t.name
+      return { ...t, name, seatOrder }
+    })
+    const updatedNew = newTables.map((t) => ({
+      ...t,
+      seatOrder: workingSeats.get(t.id) ?? (Array.isArray(t.seatOrder) ? t.seatOrder : []),
+    }))
+    const tables = [...updatedExisting, ...updatedNew]
+    const next = { ...s, guests, tables }
     debouncedSave(next)
     return withHistory(s, next)
   }),
@@ -240,7 +345,8 @@ export const useStore = create<Store>((set) => ({
   }),
 
   importState: (state) => set((s) => {
-    debouncedSave(state)
-    return { ...state, _history: [...s._history, snapshot(s)].slice(-HISTORY_LIMIT) }
+    const migrated = migrate(state)
+    debouncedSave(migrated)
+    return { ...migrated, _history: [...s._history, snapshot(s)].slice(-HISTORY_LIMIT) }
   }),
 }))

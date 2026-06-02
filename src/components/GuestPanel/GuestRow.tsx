@@ -4,6 +4,7 @@ import { Guest } from '../../types'
 import { findTableConflicts } from '../../engine/conflicts'
 import { useStore } from '../../store/useStore'
 import { ConflictTooltip } from '../ConflictTooltip'
+import { getTagColor } from '../../utils/tagColors'
 
 function TagPill({ tag, guestId }: { tag: string; guestId: string }) {
   const { setHoveredTag } = useStore()
@@ -11,6 +12,7 @@ function TagPill({ tag, guestId }: { tag: string; guestId: string }) {
     id: `tag-${guestId}-${tag}`,
     data: { type: 'tag', tag },
   })
+  const color = getTagColor(tag)
   return (
     <span
       ref={setNodeRef}
@@ -20,10 +22,23 @@ function TagPill({ tag, guestId }: { tag: string; guestId: string }) {
       onMouseLeave={() => setHoveredTag(null)}
       onClick={(e) => e.stopPropagation()}
       style={{ opacity: isDragging ? 0.4 : 1, cursor: 'grab' }}
-      className="text-xs bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded select-none hover:bg-violet-600/60"
+      className={`text-xs px-1.5 py-0.5 rounded select-none ${color.bg} ${color.text} ${color.hover}`}
     >
       {tag}
     </span>
+  )
+}
+
+function highlightMatch(text: string, term: string) {
+  if (!term) return text
+  const idx = text.toLowerCase().indexOf(term.toLowerCase())
+  if (idx === -1) return text
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 dark:bg-yellow-700 text-inherit rounded-sm px-0.5">{text.slice(idx, idx + term.length)}</mark>
+      {text.slice(idx + term.length)}
+    </>
   )
 }
 
@@ -34,9 +49,10 @@ interface Props {
   isPlusOne: boolean
   isMultiSelect: boolean
   isChecked: boolean
+  searchTerm?: string
 }
 
-export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect, isChecked }: Props) {
+export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect, isChecked, searchTerm }: Props) {
   const { relationships, guests, hoveredGuestId, setHoveredGuestId } = useStore()
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: guest.id,
@@ -74,7 +90,8 @@ export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect
       onMouseLeave={() => setHoveredGuestId(null)}
       className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer select-none
         ${isDragging ? 'opacity-40' : ''}
-        ${isOver && !isMultiSelect ? 'bg-pink-900/40 border border-pink-500' : isChecked ? 'bg-violet-100 border border-violet-500' : isSelected ? 'bg-violet-100 border border-violet-500' : isGuestHighlighted ? 'bg-green-50/60 border border-violet-500' : 'hover:bg-stone-100'}
+        ${isOver && !isMultiSelect ? 'bg-pink-900/40 border border-pink-500' : isChecked ? 'bg-violet-100 border border-violet-500' : isSelected ? 'bg-violet-100 border border-violet-500' : isGuestHighlighted ? 'bg-green-50/60 border border-violet-500' : 'hover:bg-stone-100 dark:hover:bg-stone-700'}
+        transition-all duration-150
       `}
     >
       {isMultiSelect && (
@@ -87,7 +104,9 @@ export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect
           className="accent-violet-500 shrink-0"
         />
       )}
-      <span className="text-sm font-medium text-stone-900 flex-1 break-words min-w-0">{guest.name}</span>
+      <span className="text-sm font-medium text-stone-900 dark:text-stone-100 flex-1 break-words min-w-0">
+          {searchTerm ? highlightMatch(guest.name, searchTerm) : guest.name}
+        </span>
       {isPlusOne && plusOnePartnerName && (
         <ConflictTooltip
           lines={[{ color: '#f472b6', prefix: '+1', text: plusOnePartnerName }]}

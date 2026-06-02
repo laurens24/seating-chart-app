@@ -20,6 +20,7 @@ export interface Table {
   capacity: number
   position: { x: number; y: number }
   shape: 'round' | 'rect'
+  seatOrder: string[]
 }
 
 export interface AppState {
@@ -28,13 +29,31 @@ export interface AppState {
   tables: Table[]
 }
 
+export interface ConflictResolution {
+  type: 'apart' | 'plus-one'
+  guestAName: string
+  guestBName: string
+  fromTableName: string | null
+  toTableName: string
+  action: string
+}
+
 export interface ToastMessage {
   id: string
   type: 'info' | 'warning' | 'error'
   message: string
+  persistent?: boolean
+  details?: ConflictResolution[]
 }
+
+export type OnToast = (
+  type: 'info' | 'warning' | 'error',
+  message: string,
+  options?: { persistent?: boolean; details?: ConflictResolution[] },
+) => void
 
 export interface SuggestedMove {
   guestId: string
   toTableId: string
+  insertIndex?: number
 }

@@ -13,10 +13,21 @@ export function saveState(state: AppState): void {
 export function loadState(): AppState | null {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? (JSON.parse(raw) as AppState) : null
+    if (!raw) return null
+    return migrate(JSON.parse(raw) as AppState)
   } catch {
     return null
   }
+}
+
+export function migrate(state: AppState): AppState {
+  if (state.tables.every((t) => Array.isArray(t.seatOrder))) return state
+  const tables = state.tables.map((t) => {
+    if (Array.isArray(t.seatOrder)) return t
+    const seatOrder = state.guests.filter((g) => g.tableId === t.id).map((g) => g.id)
+    return { ...t, seatOrder }
+  })
+  return { ...state, tables }
 }
 
 export function clearState(): void {

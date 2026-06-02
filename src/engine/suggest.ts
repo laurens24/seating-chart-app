@@ -1,5 +1,6 @@
-import { Guest, Relationship, Table, SuggestedMove } from '../types'
+import { Guest, Relationship, Table, SuggestedMove, ConflictResolution } from '../types'
 import { newId } from '../utils/ids'
+import { interleavePlusOnes, plusOnePartnerOf } from './seating'
 
 const DEFAULT_CAPACITY = 8
 const TABLE_STEP = 168
@@ -19,20 +20,28 @@ function nextTablePosition(tables: Table[]): { x: number; y: number } {
   return { x: TABLE_ORIGIN_X, y: TABLE_ORIGIN_Y }
 }
 
+export interface TableRename {
+  tableId: string
+  newName: string
+}
+
 export interface SuggestResult {
   moves: SuggestedMove[]
   newTables: Table[]
+  tableRenames: TableRename[]
+  resolutions: ConflictResolution[]
 }
 
-function nameNewTables(
-  newTables: Table[],
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const isDefaultTableName = (name: string) => /^Table \d+$/.test(name)
+
+function computeTableNames(
   moves: SuggestedMove[],
+  newTables: Table[],
   guests: Guest[],
   relationships: Relationship[],
   existingTables: Table[]
-): void {
-  if (newTables.length === 0) return
-
+): TableRename[] {
   const guestById = new Map(guests.map((g) => [g.id, g]))
 
   const plusOnePartners = new Map<string, Set<string>>()
@@ -55,10 +64,8 @@ function nameNewTables(
     return false
   }
 
-  const tagNames: (string | null)[] = newTables.map((table) => {
-    const guestIds = moves.filter((m) => m.toTableId === table.id).map((m) => m.guestId)
+  const computeTagForGroup = (guestIds: string[]): string | null => {
     if (guestIds.length === 0) return null
-
     const candidateTags = new Set<string>()
     for (const gid of guestIds) {
       for (const tag of (guestById.get(gid)?.tags ?? [])) candidateTags.add(tag)
@@ -66,7 +73,6 @@ function nameNewTables(
         for (const tag of (guestById.get(partnerId)?.tags ?? [])) candidateTags.add(tag)
       }
     }
-
     let bestTag: string | null = null
     let bestScore = -1
     for (const tag of candidateTags) {
@@ -75,32 +81,83 @@ function nameNewTables(
       if (directCount > bestScore) { bestScore = directCount; bestTag = tag }
     }
     return bestTag
-  })
-
-  const newTagCount = new Map<string, number>()
-  for (const tag of tagNames) {
-    if (tag) newTagCount.set(tag, (newTagCount.get(tag) ?? 0) + 1)
   }
 
-  const existingCount = (tag: string) =>
-    existingTables.filter((t) =>
-      t.name === tag || new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\d+$`).test(t.name)
-    ).length
+  const allTags = new Set<string>()
+  for (const g of guests) for (const tag of g.tags) allTags.add(tag)
+  const isAnyTagName = (name: string): boolean => {
+    for (const tag of allTags) {
+      if (name === tag || new RegExp(`^${escapeRe(tag)} \\d+$`).test(name)) return true
+    }
+    return false
+  }
 
-  const tagOffset = new Map<string, number>()
-  for (let i = 0; i < newTables.length; i++) {
-    const tag = tagNames[i]
+  // Compute each guest's post-move tableId so existing-table occupants reflect both
+  // departures (suggestMoves: was null; resolveConflicts: moved out) and arrivals.
+  const finalTableForGuest = new Map<string, string | null>()
+  for (const g of guests) finalTableForGuest.set(g.id, g.tableId)
+  for (const m of moves) finalTableForGuest.set(m.guestId, m.toTableId)
+
+  type Target = { id: string; isNew: boolean; currentName: string; finalGuestIds: string[] }
+  const targets: Target[] = []
+  const occupantsByTable = new Map<string, string[]>()
+  for (const [gid, tid] of finalTableForGuest) {
+    if (!tid) continue
+    if (!occupantsByTable.has(tid)) occupantsByTable.set(tid, [])
+    occupantsByTable.get(tid)!.push(gid)
+  }
+  for (const t of newTables) {
+    targets.push({ id: t.id, isNew: true, currentName: t.name, finalGuestIds: occupantsByTable.get(t.id) ?? [] })
+  }
+  for (const t of existingTables) {
+    const hasIncoming = moves.some((m) => m.toTableId === t.id)
+    if (!hasIncoming) continue
+    targets.push({ id: t.id, isNew: false, currentName: t.name, finalGuestIds: occupantsByTable.get(t.id) ?? [] })
+  }
+
+  // Plan a tag for each renameable target. Existing tables only rename if their
+  // current name is a default ("Table N") or already follows a tag pattern.
+  const planned = new Map<string, string>()
+  for (const t of targets) {
+    const renameable = t.isNew || isDefaultTableName(t.currentName) || isAnyTagName(t.currentName)
+    if (!renameable) continue
+    const tag = computeTagForGroup(t.finalGuestIds)
+    if (tag) planned.set(t.id, tag)
+  }
+
+  const plannedByTag = new Map<string, Target[]>()
+  for (const t of targets) {
+    const tag = planned.get(t.id)
     if (!tag) continue
-    const existing = existingCount(tag)
-    const total = (newTagCount.get(tag) ?? 0) + existing
-    if (total === 1) {
-      newTables[i].name = tag
-    } else {
-      const next = (tagOffset.get(tag) ?? existing) + 1
-      tagOffset.set(tag, next)
-      newTables[i].name = `${tag} ${next}`
+    if (!plannedByTag.has(tag)) plannedByTag.set(tag, [])
+    plannedByTag.get(tag)!.push(t)
+  }
+
+  // Tables that already match a tag pattern but aren't being renamed still occupy
+  // numbers within that tag's namespace.
+  const persistingCount = (tag: string): number => {
+    const re = new RegExp(`^${escapeRe(tag)}( \\d+)?$`)
+    return existingTables.filter((t) => !planned.has(t.id) && re.test(t.name)).length
+  }
+
+  const renames: TableRename[] = []
+  for (const [tag, plannedTargets] of plannedByTag) {
+    const existing = persistingCount(tag)
+    const total = existing + plannedTargets.length
+    let offset = existing
+    for (const t of plannedTargets) {
+      const newName = total === 1 ? tag : `${tag} ${++offset}`
+      if (newName === t.currentName) continue
+      if (t.isNew) {
+        const nt = newTables.find((n) => n.id === t.id)
+        if (nt) nt.name = newName
+      } else {
+        renames.push({ tableId: t.id, newName })
+      }
     }
   }
+
+  return renames
 }
 
 export function suggestMoves(
@@ -110,7 +167,7 @@ export function suggestMoves(
   defaultCapacity: number = DEFAULT_CAPACITY
 ): SuggestResult {
   const unassigned = guests.filter((g) => g.tableId === null)
-  if (unassigned.length === 0) return { moves: [], newTables: [] }
+  if (unassigned.length === 0) return { moves: [], newTables: [], tableRenames: [], resolutions: [] }
 
   // Track seat counts (start from existing assigned guests)
   const seated = new Map<string, string[]>() // tableId -> guestIds
@@ -150,8 +207,10 @@ export function suggestMoves(
           const seatedAtTarget = seated.get(targetTable)
           const cap = tables.find((t) => t.id === targetTable)?.capacity ?? 0
           if (seatedAtTarget && seatedAtTarget.length < cap) {
-            moves.push({ guestId: r.guestBId, toTableId: targetTable })
-            seatedAtTarget.push(r.guestBId)
+            const partnerIdx = seatedAtTarget.indexOf(r.guestAId)
+            const insertIndex = partnerIdx === -1 ? seatedAtTarget.length : partnerIdx + 1
+            moves.push({ guestId: r.guestBId, toTableId: targetTable, insertIndex })
+            seatedAtTarget.splice(insertIndex, 0, r.guestBId)
             assigned.add(r.guestBId)
             inGroup.add(r.guestBId)
           }
@@ -164,8 +223,10 @@ export function suggestMoves(
           const seatedAtTarget = seated.get(targetTable)
           const cap = tables.find((t) => t.id === targetTable)?.capacity ?? 0
           if (seatedAtTarget && seatedAtTarget.length < cap) {
-            moves.push({ guestId: r.guestAId, toTableId: targetTable })
-            seatedAtTarget.push(r.guestAId)
+            const partnerIdx = seatedAtTarget.indexOf(r.guestBId)
+            const insertIndex = partnerIdx === -1 ? seatedAtTarget.length : partnerIdx + 1
+            moves.push({ guestId: r.guestAId, toTableId: targetTable, insertIndex })
+            seatedAtTarget.splice(insertIndex, 0, r.guestAId)
             assigned.add(r.guestAId)
             inGroup.add(r.guestAId)
           }
@@ -230,33 +291,42 @@ export function suggestMoves(
     const id = newId()
     const n = tables.length + newTables.length + 1
     const pos = nextTablePosition(allTables())
-    const t: Table = { id, name: `Table ${n}`, capacity: cap, position: pos, shape: 'round' }
+    const t: Table = { id, name: `Table ${n}`, capacity: cap, position: pos, shape: 'round', seatOrder: [] }
     newTables.push(t)
     seated.set(id, [])
     tableCapacity.set(id, cap)
     return id
   }
 
-  for (const group of groups) {
+  for (const rawGroup of groups) {
+    const group = interleavePlusOnes(rawGroup, relationships)
     let tableId = findBestTable(group, seated, tableCapacity, isApart, guestTags, plusOnePartner)
     if (!tableId) {
       // Try placing each member individually, creating a new table only when truly stuck
       for (const guestId of group) {
         let singleTable = findBestTable([guestId], seated, tableCapacity, isApart, guestTags, plusOnePartner)
         if (!singleTable) singleTable = addNewTable(1)
-        moves.push({ guestId, toTableId: singleTable })
-        seated.get(singleTable)!.push(guestId)
+        const seats = seated.get(singleTable)!
+        const partnerId = plusOnePartnerOf(guestId, relationships)
+        const partnerIdx = partnerId ? seats.indexOf(partnerId) : -1
+        const insertIndex = partnerIdx === -1 ? seats.length : partnerIdx + 1
+        moves.push({ guestId, toTableId: singleTable, insertIndex })
+        seats.splice(insertIndex, 0, guestId)
       }
       continue
     }
+    const seats = seated.get(tableId)!
     for (const guestId of group) {
-      moves.push({ guestId, toTableId: tableId })
-      seated.get(tableId)!.push(guestId)
+      const partnerId = plusOnePartnerOf(guestId, relationships)
+      const partnerIdx = partnerId ? seats.indexOf(partnerId) : -1
+      const insertIndex = partnerIdx === -1 ? seats.length : partnerIdx + 1
+      moves.push({ guestId, toTableId: tableId, insertIndex })
+      seats.splice(insertIndex, 0, guestId)
     }
   }
 
-  nameNewTables(newTables, moves, guests, relationships, tables)
-  return { moves, newTables }
+  const tableRenames = computeTableNames(moves, newTables, guests, relationships, tables)
+  return { moves, newTables, tableRenames, resolutions: [] }
 }
 
 export function resolveConflicts(
@@ -265,18 +335,38 @@ export function resolveConflicts(
   tables: Table[],
   defaultCapacity: number = DEFAULT_CAPACITY
 ): SuggestResult {
-  if (tables.length === 0) return { moves: [], newTables: [] }
+  if (tables.length === 0) return { moves: [], newTables: [], tableRenames: [], resolutions: [] }
 
   const guestTable = new Map<string, string | null>(guests.map((g) => [g.id, g.tableId]))
   const tableOccupants = new Map<string, Set<string>>()
-  for (const t of tables) tableOccupants.set(t.id, new Set())
+  const tableSeatOrder = new Map<string, string[]>()
+  for (const t of tables) {
+    tableOccupants.set(t.id, new Set())
+    tableSeatOrder.set(t.id, [...t.seatOrder])
+  }
   for (const g of guests) {
     if (g.tableId) tableOccupants.get(g.tableId)?.add(g.id)
+  }
+  // Make sure seatOrder reflects current assignments (handles legacy data).
+  for (const [tid, occupants] of tableOccupants) {
+    const order = tableSeatOrder.get(tid) ?? []
+    const filtered = order.filter((id) => occupants.has(id))
+    for (const id of occupants) if (!filtered.includes(id)) filtered.push(id)
+    tableSeatOrder.set(tid, filtered)
   }
   const tableCapacity = new Map(tables.map((t) => [t.id, t.capacity]))
   const moves: SuggestedMove[] = []
   const newTablesLocal: Table[] = []
   const allTablesNow = () => [...tables, ...newTablesLocal]
+  type RawResolution = {
+    type: 'apart' | 'plus-one'
+    guestAId: string
+    guestBId: string
+    fromTableId: string | null
+    toTableId: string
+    action: string
+  }
+  const rawResolutions: RawResolution[] = []
 
   const apartPairs = new Set(
     relationships.filter((r) => r.type === 'apart').map((r) => `${r.guestAId}:${r.guestBId}`)
@@ -288,19 +378,30 @@ export function resolveConflicts(
     const id = newId()
     const n = tables.length + newTablesLocal.length + 1
     const pos = nextTablePosition(allTablesNow())
-    const t: Table = { id, name: `Table ${n}`, capacity: defaultCapacity, position: pos, shape: 'round' }
+    const t: Table = { id, name: `Table ${n}`, capacity: defaultCapacity, position: pos, shape: 'round', seatOrder: [] }
     newTablesLocal.push(t)
     tableOccupants.set(id, new Set())
+    tableSeatOrder.set(id, [])
     tableCapacity.set(id, defaultCapacity)
     return id
   }
 
-  const moveGuest = (guestId: string, toTableId: string) => {
+  const moveGuest = (guestId: string, toTableId: string, insertIndex?: number) => {
     const fromTable = guestTable.get(guestId)
-    if (fromTable) tableOccupants.get(fromTable)?.delete(guestId)
+    if (fromTable) {
+      tableOccupants.get(fromTable)?.delete(guestId)
+      const fromOrder = tableSeatOrder.get(fromTable)
+      if (fromOrder) tableSeatOrder.set(fromTable, fromOrder.filter((id) => id !== guestId))
+    }
     tableOccupants.get(toTableId)!.add(guestId)
+    const toOrder = tableSeatOrder.get(toTableId) ?? []
+    const without = toOrder.filter((id) => id !== guestId)
+    const idx = insertIndex !== undefined
+      ? Math.max(0, Math.min(insertIndex, without.length))
+      : without.length
+    tableSeatOrder.set(toTableId, [...without.slice(0, idx), guestId, ...without.slice(idx)])
     guestTable.set(guestId, toTableId)
-    moves.push({ guestId, toTableId })
+    moves.push({ guestId, toTableId, insertIndex: idx })
   }
 
   const canFit = (guestId: string, tableId: string): boolean => {
@@ -321,7 +422,21 @@ export function resolveConflicts(
       if (tid === aTable) continue
       if (canFit(r.guestBId, tid)) { dest = tid; break }
     }
-    moveGuest(r.guestBId, dest ?? makeNewTable())
+    const finalDest = dest ?? makeNewTable()
+    const partnerId = plusOnePartnerOf(r.guestBId, relationships)
+    const partnerIdxAtDest = partnerId
+      ? (tableSeatOrder.get(finalDest) ?? []).indexOf(partnerId)
+      : -1
+    const insertIndex = partnerIdxAtDest === -1 ? undefined : partnerIdxAtDest + 1
+    moveGuest(r.guestBId, finalDest, insertIndex)
+    rawResolutions.push({
+      type: 'apart',
+      guestAId: r.guestAId,
+      guestBId: r.guestBId,
+      fromTableId: aTable,
+      toTableId: finalDest,
+      action: dest ? 'moved to a different table' : 'moved to a new table',
+    })
   }
 
   // Resolve plus-one splits: reunite partners
@@ -330,8 +445,28 @@ export function resolveConflicts(
     const aTable = guestTable.get(r.guestAId)
     const bTable = guestTable.get(r.guestBId)
     if (!aTable || !bTable || aTable === bTable) continue
-    if (canFit(r.guestBId, aTable)) { moveGuest(r.guestBId, aTable); continue }
-    if (canFit(r.guestAId, bTable)) { moveGuest(r.guestAId, bTable); continue }
+    if (canFit(r.guestBId, aTable)) {
+      const partnerIdx = (tableSeatOrder.get(aTable) ?? []).indexOf(r.guestAId)
+      const insertIndex = partnerIdx === -1 ? undefined : partnerIdx + 1
+      moveGuest(r.guestBId, aTable, insertIndex)
+      rawResolutions.push({
+        type: 'plus-one', guestAId: r.guestAId, guestBId: r.guestBId,
+        fromTableId: bTable, toTableId: aTable,
+        action: 'reunited with their plus-one',
+      })
+      continue
+    }
+    if (canFit(r.guestAId, bTable)) {
+      const partnerIdx = (tableSeatOrder.get(bTable) ?? []).indexOf(r.guestBId)
+      const insertIndex = partnerIdx === -1 ? undefined : partnerIdx + 1
+      moveGuest(r.guestAId, bTable, insertIndex)
+      rawResolutions.push({
+        type: 'plus-one', guestAId: r.guestBId, guestBId: r.guestAId,
+        fromTableId: aTable, toTableId: bTable,
+        action: 'reunited with their plus-one',
+      })
+      continue
+    }
     // Neither partner's table has room — find or create a shared table
     let sharedTable: string | null = null
     for (const [tid, occupants] of tableOccupants) {
@@ -343,11 +478,35 @@ export function resolveConflicts(
       break
     }
     const dest = sharedTable ?? makeNewTable()
+    const fromForA = aTable
     moveGuest(r.guestAId, dest)
-    moveGuest(r.guestBId, dest)
+    // Place B immediately after A.
+    const aIdx = (tableSeatOrder.get(dest) ?? []).indexOf(r.guestAId)
+    moveGuest(r.guestBId, dest, aIdx === -1 ? undefined : aIdx + 1)
+    rawResolutions.push({
+      type: 'plus-one', guestAId: r.guestAId, guestBId: r.guestBId,
+      fromTableId: fromForA, toTableId: dest,
+      action: sharedTable ? 'moved together to a shared table' : 'moved together to a new table',
+    })
   }
 
-  return { moves, newTables: newTablesLocal }
+  const tableRenames = computeTableNames(moves, newTablesLocal, guests, relationships, tables)
+
+  const renameById = new Map(tableRenames.map((r) => [r.tableId, r.newName]))
+  const tableNameById = new Map<string, string>()
+  for (const t of tables) tableNameById.set(t.id, renameById.get(t.id) ?? t.name)
+  for (const t of newTablesLocal) tableNameById.set(t.id, t.name)
+  const guestNameById = new Map(guests.map((g) => [g.id, g.name]))
+  const resolutions: ConflictResolution[] = rawResolutions.map((r) => ({
+    type: r.type,
+    guestAName: guestNameById.get(r.guestAId) ?? r.guestAId,
+    guestBName: guestNameById.get(r.guestBId) ?? r.guestBId,
+    fromTableName: r.fromTableId ? (tableNameById.get(r.fromTableId) ?? null) : null,
+    toTableName: tableNameById.get(r.toTableId) ?? r.toTableId,
+    action: r.action,
+  }))
+
+  return { moves, newTables: newTablesLocal, tableRenames, resolutions }
 }
 
 function findBestTable(

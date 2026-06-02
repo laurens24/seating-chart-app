@@ -8,13 +8,13 @@
     @apply px-3 py-1.5 text-sm rounded transition-colors;
   }
   .btn-secondary {
-    @apply btn bg-stone-200 text-stone-800 hover:bg-stone-300;
+    @apply btn bg-stone-200 text-stone-800 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600;
   }
   .btn-primary {
     @apply btn bg-violet-700 text-white hover:bg-violet-600;
   }
   .btn-ghost {
-    @apply btn text-stone-600 hover:text-stone-900;
+    @apply btn text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
@@ -22,21 +22,45 @@
 
   /* Form inputs */
   .input {
-    @apply w-full px-2 py-1.5 text-sm bg-white border border-stone-300 rounded text-stone-900 focus:outline-none focus:border-violet-500;
+    @apply w-full px-2 py-1.5 text-sm bg-white border border-stone-300 rounded text-stone-900 focus:outline-none focus:border-violet-500 dark:bg-stone-800 dark:border-stone-600 dark:text-stone-100;
   }
 
   /* Modal overlay + panel */
   .modal-backdrop {
-    @apply fixed inset-0 bg-black/30 flex items-center justify-center z-50;
+    @apply fixed inset-0 bg-black/30 dark:bg-black/50 flex items-center justify-center z-50;
   }
   .modal-panel {
-    @apply bg-white rounded-lg p-6 shadow-xl;
+    @apply bg-white dark:bg-stone-800 rounded-lg p-6 shadow-xl;
   }
 
   /* Section label */
   .field-label {
-    @apply text-xs text-stone-500 uppercase tracking-wide;
+    @apply text-xs text-stone-500 dark:text-stone-400 uppercase tracking-wide;
   }
+}
+
+/* Animations */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.25s ease-out;
+}
+.animate-modal-in {
+  animation: modal-in 0.2s ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
 }
 
 @media print {

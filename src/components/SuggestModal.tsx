@@ -9,19 +9,23 @@ interface Props {
 
 export function SuggestModal({ onClose }: Props) {
   const { guests, relationships, tables, applyMoves, defaultTableCapacity } = useStore()
-  const [{ moves, newTables }] = useState(() => suggestMoves(guests, relationships, tables, defaultTableCapacity))
+  const [{ moves, newTables, tableRenames }] = useState(() =>
+    suggestMoves(guests, relationships, tables, defaultTableCapacity),
+  )
   const [index, setIndex] = useState<number | null>(null) // null = show all
   const [_skipped, setSkipped] = useState<Set<number>>(new Set())
-  // Track which new tables have already been committed so we don't insert duplicates
+  // Track which new tables and renames have already been committed so we don't repeat
   const [committedTableIds, setCommittedTableIds] = useState<Set<string>>(new Set())
+  const [committedRenameIds, setCommittedRenameIds] = useState<Set<string>>(new Set())
 
+  const renameByTableId = new Map(tableRenames.map((r) => [r.tableId, r.newName]))
   const allTables = [...tables, ...newTables]
   const guestName = (id: string) => guests.find((g) => g.id === id)?.name ?? id
-  const tableName = (id: string) => allTables.find((t) => t.id === id)?.name ?? id
+  const tableName = (id: string) => renameByTableId.get(id) ?? allTables.find((t) => t.id === id)?.name ?? id
   const tablemates = (toTableId: string) =>
     guests.filter((g) => g.tableId === toTableId).map((g) => g.name)
 
-  const applyAll = () => { applyMoves(moves, newTables); onClose() }
+  const applyAll = () => { applyMoves(moves, newTables, tableRenames); onClose() }
   const startReview = () => setIndex(0)
 
   const acceptCurrent = () => {
@@ -29,8 +33,12 @@ export function SuggestModal({ onClose }: Props) {
     const move = moves[index]
     const tableForMove = newTables.find((t) => t.id === move.toTableId && !committedTableIds.has(t.id))
     const tablesToCommit = tableForMove ? [tableForMove] : []
-    applyMoves([move], tablesToCommit)
+    const renameForMove = !committedRenameIds.has(move.toTableId) && renameByTableId.has(move.toTableId)
+      ? [{ tableId: move.toTableId, newName: renameByTableId.get(move.toTableId)! }]
+      : []
+    applyMoves([move], tablesToCommit, renameForMove)
     if (tableForMove) setCommittedTableIds((s) => new Set([...s, tableForMove.id]))
+    if (renameForMove.length > 0) setCommittedRenameIds((s) => new Set([...s, move.toTableId]))
     const next = index + 1
     if (next >= moves.length) onClose()
     else setIndex(next)
@@ -47,9 +55,9 @@ export function SuggestModal({ onClose }: Props) {
   if (moves.length === 0) {
     return (
       <div className="modal-backdrop">
-        <div className="modal-panel max-w-sm w-full">
-          <h2 className="text-lg font-semibold text-stone-900 mb-2">Nothing to suggest</h2>
-          <p className="text-sm text-stone-500 mb-4">All guests are already assigned.</p>
+        <div className="modal-panel max-w-sm w-full animate-modal-in">
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100 mb-2">Nothing to suggest</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">All guests are already assigned.</p>
           <button onClick={onClose} className="btn-secondary">Close</button>
         </div>
       </div>
@@ -58,9 +66,9 @@ export function SuggestModal({ onClose }: Props) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-panel max-w-md w-full max-h-[80vh] flex flex-col">
-        <h2 className="text-lg font-semibold text-stone-900 mb-1">Suggested Seating</h2>
-        <p className="text-sm text-stone-500 mb-4">
+      <div className="modal-panel max-w-md w-full max-h-[80vh] flex flex-col animate-modal-in">
+        <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100 mb-1">Suggested Seating</h2>
+        <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
           {moves.length} proposed {moves.length === 1 ? 'move' : 'moves'}
           {newTables.length > 0 && ` · ${newTables.length} new ${newTables.length === 1 ? 'table' : 'tables'} needed`}
         </p>

@@ -3,6 +3,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { Table, Guest } from '../../types'
 import { useStore } from '../../store/useStore'
 import { findTableConflicts, hasGuestPlusOneConflict } from '../../engine/conflicts'
+import { getSeatedGuests } from '../../engine/seating'
 
 function SeatedGuestPill({ guest, guests, relationships, hoveredGuestId }: {
   guest: Guest
@@ -39,7 +40,7 @@ function SeatedGuestPill({ guest, guests, relationships, hoveredGuestId }: {
       onMouseLeave={() => setHoveredGuestId(null)}
       style={{ opacity: isDragging ? 0.4 : 1, cursor: 'grab' }}
       className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full select-none transition-colors
-        ${isHighlighted ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-stone-200 text-stone-800'}`}
+        ${isHighlighted ? 'bg-violet-600 text-white ring-1 ring-violet-500' : 'bg-stone-200 dark:bg-stone-600 text-stone-800 dark:text-stone-200'}`}
     >
       {guest.name}
       {plusOneConflict && <span className="text-pink-400">⚠</span>}
@@ -75,7 +76,7 @@ export function TableRow({ table }: Props) {
     setIsEditingCap(false)
   }
 
-  const seated = guests.filter((g) => g.tableId === table.id)
+  const seated = getSeatedGuests(table, guests)
   const conflicts = findTableConflicts(table.id, guests, relationships)
   const isOverCapacity = seated.length > table.capacity
   const isFull = seated.length === table.capacity && table.capacity > 0
@@ -86,10 +87,10 @@ export function TableRow({ table }: Props) {
   })
 
   return (
-    <div ref={setNodeRef} className={`border rounded-lg overflow-hidden flex flex-col ${isOver ? 'border-green-500' : isFull ? 'border-green-700' : 'border-stone-200'}`}>
+    <div ref={setNodeRef} className={`border rounded-lg overflow-hidden flex flex-col ${isOver ? 'border-green-500' : isFull ? 'border-green-700' : 'border-stone-200 dark:border-stone-600'}`}>
       {/* Card header */}
       <div
-        className={`flex items-center gap-2 px-3 py-2 cursor-pointer shrink-0 ${isOver ? 'bg-green-50' : isFull ? 'bg-green-50 hover:bg-green-50/60' : 'bg-stone-100 hover:bg-stone-100'}`}
+        className={`flex items-center gap-2 px-3 py-2 cursor-pointer shrink-0 ${isOver ? 'bg-green-50 dark:bg-green-900/30' : isFull ? 'bg-green-50 dark:bg-green-900/30 hover:bg-green-50/60' : 'bg-stone-100 dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600'}`}
         onClick={() => setExpanded((v) => !v)}
       >
         {isEditingName ? (
@@ -104,7 +105,7 @@ export function TableRow({ table }: Props) {
           />
         ) : (
           <span
-            className="text-sm font-semibold text-stone-900 flex-1 truncate cursor-text"
+            className="text-sm font-semibold text-stone-900 dark:text-stone-100 flex-1 truncate cursor-text"
             onDoubleClick={(e) => { e.stopPropagation(); setEditName(table.name); setIsEditingName(true) }}
           >{table.name}</span>
         )}
@@ -146,8 +147,8 @@ export function TableRow({ table }: Props) {
       </div>
       {/* Guest list */}
       {expanded && (
-        <div className="px-3 py-2 bg-stone-50 flex flex-wrap gap-1 min-h-[2rem]">
-          {seated.length === 0 && <span className="text-xs text-stone-300 self-center">No guests assigned.</span>}
+        <div className="px-3 py-2 bg-stone-50 dark:bg-stone-800 flex flex-wrap gap-1 min-h-[2rem]">
+          {seated.length === 0 && <span className="text-xs text-stone-300 dark:text-stone-500 self-center">No guests assigned.</span>}
           {seated.map((g) => (
             <SeatedGuestPill
               key={g.id}

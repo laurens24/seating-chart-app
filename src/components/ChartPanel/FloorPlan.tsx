@@ -190,7 +190,7 @@ export function FloorPlan() {
         className="w-full h-full overflow-auto"
       >
         <div style={{ width: CANVAS_W, height: CANVAS_H, position: 'relative' }}>
-          <div className="absolute inset-4 border border-dashed border-stone-200 rounded pointer-events-none" />
+          <div className="absolute inset-4 border border-dashed border-stone-200 dark:border-stone-700 rounded pointer-events-none" />
           {tables.map((table) => (
             <TableShape key={table.id} table={table} />
           ))}
@@ -218,8 +218,8 @@ export function FloorPlan() {
         <button onClick={addTable} className="btn-primary">
           + Add Table
         </button>
-        <div className="flex items-center gap-1 bg-white border border-stone-200 rounded px-2 py-1 shadow-sm">
-          <label className="text-xs text-stone-500 select-none">Default seats</label>
+        <div className="flex items-center gap-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded px-2 py-1 shadow-sm">
+          <label className="text-xs text-stone-500 dark:text-stone-400 select-none">Default seats</label>
           <input
             type="number"
             min={1}
@@ -229,13 +229,13 @@ export function FloorPlan() {
               const n = parseInt(e.target.value, 10)
               if (!isNaN(n) && n >= 1 && n <= 50) setDefaultTableCapacity(n)
             }}
-            className="w-10 text-xs text-center border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 py-0.5"
+            className="w-10 text-xs text-center border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-100 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 py-0.5"
           />
         </div>
       </div>
 
       <div
-        className="absolute bottom-4 right-4 z-20 rounded border border-stone-300 bg-stone-50 overflow-hidden cursor-crosshair select-none"
+        className="absolute bottom-4 right-4 z-20 rounded border border-stone-300 dark:border-stone-600 bg-stone-50 dark:bg-stone-800 overflow-hidden cursor-crosshair select-none"
         style={{ width: MAP_W, height: MAP_H }}
         onPointerDown={handleMinimapPointerDown}
         onPointerMove={handleMinimapPointerMove}

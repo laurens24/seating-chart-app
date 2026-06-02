@@ -43,7 +43,7 @@ export function GuestEditor({ guest, onClose }: Props) {
   }
 
   return (
-    <div className="px-3 py-3 bg-stone-100 border border-stone-200 rounded-lg mx-2 mb-2">
+    <div className="px-3 py-3 bg-stone-100 dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-lg mx-2 mb-2 animate-fade-in">
       <div className="flex flex-col gap-3">
         <div>
           <label className="field-label">Name</label>
@@ -80,8 +80,8 @@ export function GuestEditor({ guest, onClose }: Props) {
                   <span className={r.type === 'apart' ? 'text-red-400' : r.type === 'plus-one' ? 'text-pink-400' : 'text-green-500'}>
                     {r.type === 'apart' ? '✗' : r.type === 'plus-one' ? '+1' : '✓'}
                   </span>
-                  <span className="text-stone-600">{other?.name ?? 'Unknown'}</span>
-                  {r.note && <span className="text-stone-400 text-xs">({r.note})</span>}
+                  <span className="text-stone-600 dark:text-stone-300">{other?.name ?? 'Unknown'}</span>
+                  {r.note && <span className="text-stone-400 dark:text-stone-500 text-xs">({r.note})</span>}
                   <button
                     onClick={() => removeRelationship(r.guestAId, r.guestBId)}
                     className="ml-auto text-stone-400 hover:text-red-400 text-xs"
@@ -95,7 +95,7 @@ export function GuestEditor({ guest, onClose }: Props) {
               <select
                 value={relType}
                 onChange={(e) => setRelType(e.target.value as 'together' | 'apart' | 'plus-one')}
-                className="text-xs bg-white border border-stone-300 rounded px-1 text-stone-800 shrink-0"
+                className="text-xs bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1 text-stone-800 dark:text-stone-200 shrink-0"
               >
                 <option value="together">together</option>
                 <option value="apart">apart</option>
@@ -104,7 +104,7 @@ export function GuestEditor({ guest, onClose }: Props) {
               <select
                 value={relGuestId}
                 onChange={(e) => setRelGuestId(e.target.value)}
-                className="flex-1 min-w-0 text-xs bg-white border border-stone-300 rounded px-1 text-stone-800"
+                className="flex-1 min-w-0 text-xs bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1 text-stone-800 dark:text-stone-200"
               >
                 <option value="">— pick guest —</option>
                 {otherGuests.map((g) => (

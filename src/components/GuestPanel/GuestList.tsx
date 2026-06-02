@@ -1,6 +1,6 @@
 // src/components/GuestPanel/GuestList.tsx
 import { useState, useEffect, useRef } from 'react'
-import { AppState, Guest, Relationship } from '../../types'
+import { AppState, Guest, Relationship, OnToast } from '../../types'
 import { useStore } from '../../store/useStore'
 import { GuestSearch } from './GuestSearch'
 import { GuestRow } from './GuestRow'
@@ -43,7 +43,7 @@ function sortWithPlusOnes(guests: Guest[], allRelationships: ReturnType<typeof u
 type AssignFilter = 'all' | 'assigned' | 'unassigned'
 
 interface Props {
-  onToast: (type: 'info' | 'warning' | 'error', message: string) => void
+  onToast: OnToast
 }
 
 export function GuestList({ onToast }: Props) {
@@ -189,7 +189,7 @@ export function GuestList({ onToast }: Props) {
                 onChange={() => setAssignFilter(f)}
                 className="accent-violet-500"
               />
-              <span className="text-xs text-stone-500 capitalize">{f}</span>
+              <span className="text-xs text-stone-500 dark:text-stone-400 capitalize">{f}</span>
             </label>
           ))}
           <button
@@ -199,13 +199,13 @@ export function GuestList({ onToast }: Props) {
             {isMultiSelect ? 'Done' : 'Select'}
           </button>
         </div>
-        <div className="mt-1 text-xs text-stone-400">
+        <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">
           {guests.length} guests · {guests.filter((g) => g.tableId === null).length} unassigned
         </div>
       </div>
 
       {isMultiSelect && (
-        <div className="px-3 pb-2 shrink-0 flex flex-col gap-2 border-b border-stone-200">
+        <div className="px-3 pb-2 shrink-0 flex flex-col gap-2 border-b border-stone-200 dark:border-stone-700">
           <div className="flex gap-1">
             <TagInput
               value={tagInput}
@@ -257,6 +257,7 @@ export function GuestList({ onToast }: Props) {
               isPlusOne={plusOneGuestIds.has(guest.id)}
               isMultiSelect={isMultiSelect}
               isChecked={checkedIds.has(guest.id)}
+              searchTerm={search}
             />
             {!isMultiSelect && selectedId === guest.id && selectedGuest && (
               <GuestEditor guest={selectedGuest} onClose={() => setSelectedId(null)} />
@@ -264,12 +265,12 @@ export function GuestList({ onToast }: Props) {
           </div>
         ))}
         {filtered.length === 0 && (
-          <p className="text-sm text-stone-400 text-center mt-8">
+          <p className="text-sm text-stone-400 dark:text-stone-500 text-center mt-8">
             {search ? 'No guests match your search.' : 'No guests yet.'}
           </p>
         )}
       </div>
-      <div className="px-3 py-3 shrink-0 border-t border-stone-200 flex gap-2">
+      <div className="px-3 py-3 shrink-0 border-t border-stone-200 dark:border-stone-700 flex gap-2">
         <button onClick={handleAddGuest} className="btn-primary flex-1 py-2">
           + Add Guest
         </button>
