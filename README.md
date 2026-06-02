@@ -8,13 +8,18 @@ A drag-and-drop event seating planner. Build your guest list, define relationshi
 
 ## Features
 
-- **Guest list** — add, edit, tag, and search guests; bulk-select to apply tags, unassign, or delete
+- **Guest list** — add, edit, tag, and search guests; bulk-select to apply tags, unassign, or delete; search highlights matching text
 - **Relationships** — mark pairs as *together*, *apart*, or *plus-one*; conflict warnings surface automatically
 - **Drag and drop** — drag guests onto tables on the floor plan, drag tags onto tables to fill seats by group
 - **Import** — upload `.txt` or `.csv`, or paste names directly; `Alice & Bob` / `Alice and Bob` syntax creates plus-one pairs automatically; duplicate names prompt for rename before import
 - **Suggest seating** — auto-assigns all unassigned guests respecting relationships; creates new tables if needed
 - **Fix conflicts** — one click resolves all seating conflicts (apart violations and split plus-ones)
-- **Export** — save your full chart as JSON or print the table list
+- **Export** — CSV with configurable columns (table name, guest names, capacity, shape) separated by blank rows per table, or JSON for re-import
+- **Dark mode** — toggle between light and dark themes; preference persists across sessions
+- **Undo / Redo** — full history with `⌘Z` / `⌘⇧Z` support
+- **Progress indicator** — top bar shows how many guests are seated at a glance
+- **Tag colors** — each tag gets a unique, deterministic color for quick scanning
+- **Animated transitions** — smooth enter/exit animations on toasts, modals, and guest rows
 - **Auto-save** — state persists to `localStorage`; no login needed
 
 ## Getting Started
