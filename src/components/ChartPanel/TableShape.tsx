@@ -162,6 +162,8 @@ export function TableShape({ table }: Props) {
       data-table-shape
       data-table-id={table.id}
       ref={(node) => { setOrbitRef(node); orbitRefDom.current = node }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => { if (!confirmDelete) setIsHovered(false) }}
       style={{
         position: 'absolute',
         left: x - (footprint - w) / 2,
@@ -170,7 +172,7 @@ export function TableShape({ table }: Props) {
         height: footprint,
         transform: dx || dy ? `translate3d(${dx}px, ${dy}px, 0)` : undefined,
         opacity: isDragging ? 0.5 : 1,
-        pointerEvents: 'none',
+        pointerEvents: 'auto',
       }}
     >
       <div
@@ -179,8 +181,6 @@ export function TableShape({ table }: Props) {
         ref={(node) => { setDragRef(node); setDropRef(node) }}
         {...attributes}
         {...listeners}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => { if (!confirmDelete) setIsHovered(false) }}
         style={{
           position: 'absolute',
           left: (footprint - w) / 2,
@@ -259,24 +259,53 @@ export function TableShape({ table }: Props) {
             <span className="text-red-400 text-xs">⚠</span>
           </ConflictTooltip>
         )}
-        {isHovered && !confirmDelete && (
-          <button
-            title="Delete table"
-            onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
-            onPointerDown={(e) => e.stopPropagation()}
-            style={{
-              position: 'absolute',
-              right: -10,
-              top: -10,
-              zIndex: 20,
-              pointerEvents: 'auto',
-            }}
-            className="w-6 h-6 rounded-full bg-stone-200 dark:bg-stone-700 hover:bg-red-700 flex items-center justify-center text-stone-600 dark:text-stone-300 hover:text-white text-sm leading-none shadow"
-          >
-            ✕
-          </button>
-        )}
       </div>
+
+      {isHovered && !confirmDelete && (
+        <button
+          title="Delete table"
+          onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            right: (footprint - w) / 2 - 4,
+            top: (footprint - h) / 2 - 4,
+            zIndex: 30,
+            pointerEvents: 'auto',
+          }}
+          className="w-6 h-6 rounded-full bg-stone-200 dark:bg-stone-700 hover:bg-red-700 flex items-center justify-center text-stone-600 dark:text-stone-300 hover:text-white text-sm leading-none shadow"
+        >
+          ✕
+        </button>
+      )}
+
+      {/* Plus-one connection lines */}
+      <svg
+        style={{ position: 'absolute', left: 0, top: 0, width: footprint, height: footprint, pointerEvents: 'none', zIndex: 5 }}
+      >
+        {relationships
+          .filter((r) => r.type === 'plus-one')
+          .map((r) => {
+            const aIdx = seated.findIndex((g) => g.id === r.guestAId)
+            const bIdx = seated.findIndex((g) => g.id === r.guestBId)
+            if (aIdx === -1 || bIdx === -1) return null
+            const aRad = (angles[aIdx] * Math.PI) / 180
+            const bRad = (angles[bIdx] * Math.PI) / 180
+            const ax = FOOTPRINT_HALF + Math.cos(aRad) * LABEL_ORBIT
+            const ay = FOOTPRINT_HALF + Math.sin(aRad) * LABEL_ORBIT
+            const bx = FOOTPRINT_HALF + Math.cos(bRad) * LABEL_ORBIT
+            const by = FOOTPRINT_HALF + Math.sin(bRad) * LABEL_ORBIT
+            return (
+              <line
+                key={`${r.guestAId}-${r.guestBId}`}
+                x1={ax} y1={ay} x2={bx} y2={by}
+                stroke="#f9a8d4"
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+            )
+          })}
+      </svg>
 
       {seated.map((g, i) => (
         <SeatedGuestLabel

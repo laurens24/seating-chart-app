@@ -42,7 +42,7 @@ export default function App() {
 
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [resolutionsModal, setResolutionsModal] = useState<{ resolutions: ConflictResolution[]; toastId: string } | null>(null)
-  const [activeSeatDrag, setActiveSeatDrag] = useState<{ guestId: string; guestName: string } | null>(null)
+  const [activeSeatDrag, setActiveSeatDrag] = useState<{ guestId: string; guestName: string; partnerName?: string } | null>(null)
   const [seatDragOverTable, setSeatDragOverTable] = useState(false)
   const [activeTagDrag, setActiveTagDrag] = useState<string | null>(null)
 
@@ -69,16 +69,25 @@ export default function App() {
     }
     if (id.startsWith('seated-')) {
       const guestId = (event.active.data.current as { guestId: string }).guestId
-      const guestName = useStore.getState().guests.find((g) => g.id === guestId)?.name ?? ''
-      setActiveSeatDrag({ guestId, guestName })
+      const { guests, relationships } = useStore.getState()
+      const guestName = guests.find((g) => g.id === guestId)?.name ?? ''
+      const plusOneRel = relationships.find((r) => r.type === 'plus-one' && (r.guestAId === guestId || r.guestBId === guestId))
+      const partnerId = plusOneRel ? (plusOneRel.guestAId === guestId ? plusOneRel.guestBId : plusOneRel.guestAId) : null
+      const partnerFullName = partnerId ? guests.find((g) => g.id === partnerId)?.name : undefined
+      const partnerName = partnerFullName ? partnerFullName.split(' ')[0] : undefined
+      setActiveSeatDrag({ guestId, guestName: partnerName ? guestName.split(' ')[0] : guestName, partnerName })
       setSeatDragOverTable(false)
     } else if (id.startsWith('tag-')) {
       setActiveTagDrag((event.active.data.current as { tag: string }).tag)
     } else {
-      // Plain guest row drag from the guest panel
-      const guestName = useStore.getState().guests.find((g) => g.id === id)?.name ?? ''
+      const { guests, relationships } = useStore.getState()
+      const guestName = guests.find((g) => g.id === id)?.name ?? ''
       if (guestName) {
-        setActiveSeatDrag({ guestId: id, guestName })
+        const plusOneRel = relationships.find((r) => r.type === 'plus-one' && (r.guestAId === id || r.guestBId === id))
+        const partnerId = plusOneRel ? (plusOneRel.guestAId === id ? plusOneRel.guestBId : plusOneRel.guestAId) : null
+        const partnerFullName = partnerId ? guests.find((g) => g.id === partnerId)?.name : undefined
+        const partnerName = partnerFullName ? partnerFullName.split(' ')[0] : undefined
+        setActiveSeatDrag({ guestId: id, guestName: partnerName ? guestName.split(' ')[0] : guestName, partnerName })
         setSeatDragOverTable(false)
       }
     }
@@ -123,7 +132,6 @@ export default function App() {
       : [guestId]
 
     for (const id of toAssign) {
-      // The first dragged guest gets the explicit index; the rest append next to their partner.
       assignGuest(id, tableId, id === guestId ? insertIndex : undefined)
       const rel = relationships.find(
         (r) => r.type === 'plus-one' && (r.guestAId === id || r.guestBId === id)
@@ -132,7 +140,7 @@ export default function App() {
         const partnerId = rel.guestAId === id ? rel.guestBId : rel.guestAId
         if (!toAssign.includes(partnerId)) {
           const partner = guests.find((g) => g.id === partnerId)
-          if (partner && partner.tableId === null) assignGuest(partnerId, tableId)
+          if (partner && partner.tableId !== tableId) assignGuest(partnerId, tableId)
         }
       }
     }
@@ -254,12 +262,28 @@ export default function App() {
         const fromTableId = useStore.getState().guests.find((g) => g.id === guestId)?.tableId ?? null
         const insertIndex = computeDropIndex(String(over.id), tableId, guestId)
         if (fromTableId === tableId && insertIndex !== undefined) {
-          useStore.getState().reorderSeat(tableId, guestId, insertIndex)
+          const { relationships, reorderSeat } = useStore.getState()
+          reorderSeat(tableId, guestId, insertIndex)
+          const rel = relationships.find((r) => r.type === 'plus-one' && (r.guestAId === guestId || r.guestBId === guestId))
+          if (rel) {
+            const partnerId = rel.guestAId === guestId ? rel.guestBId : rel.guestAId
+            const table = useStore.getState().tables.find((t) => t.id === tableId)
+            if (table) {
+              const guestIdx = table.seatOrder.indexOf(guestId)
+              if (guestIdx !== -1) reorderSeat(tableId, partnerId, guestIdx + 1)
+            }
+          }
         } else {
           assignWithPlusOne(guestId, tableId, insertIndex)
         }
       } else {
-        useStore.getState().unassignGuest(guestId)
+        const { relationships, unassignGuest } = useStore.getState()
+        unassignGuest(guestId)
+        const rel = relationships.find((r) => r.type === 'plus-one' && (r.guestAId === guestId || r.guestBId === guestId))
+        if (rel) {
+          const partnerId = rel.guestAId === guestId ? rel.guestBId : rel.guestAId
+          unassignGuest(partnerId)
+        }
       }
       return
     }
@@ -332,6 +356,8 @@ export default function App() {
             >
               {!seatDragOverTable && <span className="font-bold">✕</span>}
               {activeSeatDrag.guestName}
+              {activeSeatDrag.partnerName && <span className="opacity-70">&</span>}
+              {activeSeatDrag.partnerName}
               {seatDragOverTable && <span className="opacity-70">→</span>}
             </div>
           )}

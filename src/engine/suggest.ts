@@ -302,16 +302,23 @@ export function suggestMoves(
     const group = interleavePlusOnes(rawGroup, relationships)
     let tableId = findBestTable(group, seated, tableCapacity, isApart, guestTags, plusOnePartner)
     if (!tableId) {
-      // Try placing each member individually, creating a new table only when truly stuck
+      const placed = new Set<string>()
       for (const guestId of group) {
-        let singleTable = findBestTable([guestId], seated, tableCapacity, isApart, guestTags, plusOnePartner)
-        if (!singleTable) singleTable = addNewTable(1)
-        const seats = seated.get(singleTable)!
-        const partnerId = plusOnePartnerOf(guestId, relationships)
-        const partnerIdx = partnerId ? seats.indexOf(partnerId) : -1
-        const insertIndex = partnerIdx === -1 ? seats.length : partnerIdx + 1
-        moves.push({ guestId, toTableId: singleTable, insertIndex })
-        seats.splice(insertIndex, 0, guestId)
+        if (placed.has(guestId)) continue
+        const partnerId = plusOnePartner.get(guestId)
+        const pairIds = partnerId && group.includes(partnerId) && !placed.has(partnerId)
+          ? [guestId, partnerId]
+          : [guestId]
+        let pairTable = findBestTable(pairIds, seated, tableCapacity, isApart, guestTags, plusOnePartner)
+        if (!pairTable) pairTable = addNewTable(pairIds.length)
+        const seats = seated.get(pairTable)!
+        for (const id of pairIds) {
+          const existingPartnerIdx = seats.indexOf(plusOnePartner.get(id) ?? '')
+          const insertIndex = existingPartnerIdx === -1 ? seats.length : existingPartnerIdx + 1
+          moves.push({ guestId: id, toTableId: pairTable, insertIndex })
+          seats.splice(insertIndex, 0, id)
+          placed.add(id)
+        }
       }
       continue
     }

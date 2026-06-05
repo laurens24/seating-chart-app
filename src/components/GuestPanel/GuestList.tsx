@@ -52,7 +52,6 @@ export function GuestList({ onToast }: Props) {
   const [search, setSearch] = useState('')
   const [assignFilter, setAssignFilter] = useState<AssignFilter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [isMultiSelect, setIsMultiSelect] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [lastCheckedId, setLastCheckedId] = useState<string | null>(null)
   const [tagInput, setTagInput] = useState('')
@@ -100,29 +99,29 @@ export function GuestList({ onToast }: Props) {
 
   const selectedGuest = selectedId ? guests.find((g) => g.id === selectedId) : null
 
-  const handleSelect = (id: string, shiftKey = false) => {
-    if (isMultiSelect) {
-      if (shiftKey && lastCheckedId && lastCheckedId !== id) {
-        const ids = filtered.map((g) => g.id)
-        const a = ids.indexOf(lastCheckedId)
-        const b = ids.indexOf(id)
-        const [lo, hi] = a < b ? [a, b] : [b, a]
-        setCheckedIds((prev) => {
-          const next = new Set(prev)
-          for (let i = lo; i <= hi; i++) next.add(ids[i])
-          return next
-        })
-      } else {
-        setCheckedIds((prev) => {
-          const next = new Set(prev)
-          next.has(id) ? next.delete(id) : next.add(id)
-          return next
-        })
-      }
-      setLastCheckedId(id)
+  const handleSelect = (id: string) => {
+    setSelectedId((prev) => (prev === id ? null : id))
+  }
+
+  const handleCheck = (id: string, shiftKey = false) => {
+    if (shiftKey && lastCheckedId && lastCheckedId !== id) {
+      const ids = filtered.map((g) => g.id)
+      const a = ids.indexOf(lastCheckedId)
+      const b = ids.indexOf(id)
+      const [lo, hi] = a < b ? [a, b] : [b, a]
+      setCheckedIds((prev) => {
+        const next = new Set(prev)
+        for (let i = lo; i <= hi; i++) next.add(ids[i])
+        return next
+      })
     } else {
-      setSelectedId((prev) => (prev === id ? null : id))
+      setCheckedIds((prev) => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
     }
+    setLastCheckedId(id)
   }
 
   const handleAddGuest = () => {
@@ -138,14 +137,6 @@ export function GuestList({ onToast }: Props) {
         })
       })
     }, 0)
-  }
-
-  const toggleMultiSelect = () => {
-    setIsMultiSelect((v) => !v)
-    setCheckedIds(new Set())
-    setLastCheckedId(null)
-    setTagInput('')
-    setSelectedId(null)
   }
 
   const selectAll = () => setCheckedIds(new Set(guests.map((g) => g.id)))
@@ -192,19 +183,13 @@ export function GuestList({ onToast }: Props) {
               <span className="text-xs text-stone-500 dark:text-stone-400 capitalize">{f}</span>
             </label>
           ))}
-          <button
-            onClick={toggleMultiSelect}
-            className={`text-xs px-2 py-0.5 rounded ml-auto ${isMultiSelect ? 'bg-violet-700 text-white' : 'text-stone-500 hover:text-stone-800'}`}
-          >
-            {isMultiSelect ? 'Done' : 'Select'}
-          </button>
         </div>
         <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">
           {guests.length} guests · {guests.filter((g) => g.tableId === null).length} unassigned
         </div>
       </div>
 
-      {isMultiSelect && (
+      {checkedIds.size > 0 && (
         <div className="px-3 pb-2 shrink-0 flex flex-col gap-2 border-b border-stone-200 dark:border-stone-700">
           <div className="flex gap-1">
             <TagInput
@@ -254,12 +239,13 @@ export function GuestList({ onToast }: Props) {
               guest={guest}
               isSelected={selectedId === guest.id}
               onSelect={handleSelect}
+              onCheck={handleCheck}
               isPlusOne={plusOneGuestIds.has(guest.id)}
-              isMultiSelect={isMultiSelect}
+              isMultiSelect={true}
               isChecked={checkedIds.has(guest.id)}
               searchTerm={search}
             />
-            {!isMultiSelect && selectedId === guest.id && selectedGuest && (
+            {selectedId === guest.id && selectedGuest && (
               <GuestEditor guest={selectedGuest} onClose={() => setSelectedId(null)} />
             )}
           </div>

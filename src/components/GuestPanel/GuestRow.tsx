@@ -45,14 +45,15 @@ function highlightMatch(text: string, term: string) {
 interface Props {
   guest: Guest
   isSelected: boolean
-  onSelect: (id: string, shiftKey: boolean) => void
+  onSelect: (id: string) => void
+  onCheck?: (id: string, shiftKey: boolean) => void
   isPlusOne: boolean
   isMultiSelect: boolean
   isChecked: boolean
   searchTerm?: string
 }
 
-export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect, isChecked, searchTerm }: Props) {
+export function GuestRow({ guest, isSelected, onSelect, onCheck, isPlusOne, isMultiSelect, isChecked, searchTerm }: Props) {
   const { relationships, guests, hoveredGuestId, setHoveredGuestId } = useStore()
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: guest.id,
@@ -85,12 +86,12 @@ export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect
       ref={(node) => { setDragRef(node); setDropRef(node) }}
       {...attributes}
       {...listeners}
-      onClick={(e) => onSelect(guest.id, e.shiftKey)}
+      onClick={() => onSelect(guest.id)}
       onMouseEnter={() => setHoveredGuestId(guest.id)}
       onMouseLeave={() => setHoveredGuestId(null)}
       className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer select-none
         ${isDragging ? 'opacity-40' : ''}
-        ${isOver && !isMultiSelect ? 'bg-pink-900/40 border border-pink-500' : isChecked ? 'bg-violet-100 border border-violet-500' : isSelected ? 'bg-violet-100 border border-violet-500' : isGuestHighlighted ? 'bg-green-50/60 border border-violet-500' : 'hover:bg-stone-100 dark:hover:bg-stone-700'}
+        ${isOver ? 'bg-pink-900/40 border border-pink-500' : isChecked ? 'bg-violet-100 border border-violet-500' : isSelected ? 'bg-violet-100 border border-violet-500' : isGuestHighlighted ? 'bg-green-50/60 border border-violet-500' : 'hover:bg-stone-100 dark:hover:bg-stone-700'}
         transition-all duration-150
       `}
     >
@@ -98,7 +99,7 @@ export function GuestRow({ guest, isSelected, onSelect, isPlusOne, isMultiSelect
         <input
           type="checkbox"
           checked={isChecked}
-          onChange={(e) => onSelect(guest.id, (e.nativeEvent as MouseEvent).shiftKey)}
+          onChange={(e) => onCheck?.(guest.id, (e.nativeEvent as MouseEvent).shiftKey)}
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           className="accent-violet-500 shrink-0"

@@ -73,11 +73,16 @@ function GuestArrow({ scroll, vpSize }: { scroll: { x: number; y: number }; vpSi
   )
 }
 
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 1.5
+const ZOOM_STEP = 0.15
+
 export function FloorPlan() {
   const { tables, addTable, setSelectedTableIds, defaultTableCapacity, setDefaultTableCapacity } = useStore()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scroll, setScroll] = useState({ x: 0, y: 0 })
   const [vpSize, setVpSize] = useState({ w: 0, h: 0 })
+  const [zoom, setZoom] = useState(1)
   const isDraggingMap = useRef(false)
   const [marquee, setMarquee] = useState<Marquee | null>(null)
   const isMarqueeing = useRef(false)
@@ -105,10 +110,10 @@ export function FloorPlan() {
     if (!el) return { x: 0, y: 0 }
     const rect = el.getBoundingClientRect()
     return {
-      x: e.clientX - rect.left + el.scrollLeft,
-      y: e.clientY - rect.top + el.scrollTop,
+      x: (e.clientX - rect.left + el.scrollLeft) / zoom,
+      y: (e.clientY - rect.top + el.scrollTop) / zoom,
     }
-  }, [])
+  }, [zoom])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
@@ -156,10 +161,10 @@ export function FloorPlan() {
     const el = scrollRef.current
     if (!el) return
     el.scrollTo({
-      left: mx / scaleX - el.clientWidth / 2,
-      top: my / scaleY - el.clientHeight / 2,
+      left: (mx / scaleX) * zoom - el.clientWidth / 2,
+      top: (my / scaleY) * zoom - el.clientHeight / 2,
     })
-  }, [scaleX, scaleY])
+  }, [scaleX, scaleY, zoom])
 
   const handleMinimapPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     isDraggingMap.current = true
@@ -178,6 +183,38 @@ export function FloorPlan() {
     isDraggingMap.current = false
   }, [])
 
+  const applyZoom = useCallback((newZoom: number, clientX?: number, clientY?: number) => {
+    const el = scrollRef.current
+    if (!el) { setZoom(newZoom); return }
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom))
+    const oldZoom = zoom
+    if (clamped === oldZoom) return
+
+    const rect = el.getBoundingClientRect()
+    const px = (clientX ?? rect.left + rect.width / 2) - rect.left
+    const py = (clientY ?? rect.top + rect.height / 2) - rect.top
+
+    const canvasX = (el.scrollLeft + px) / oldZoom
+    const canvasY = (el.scrollTop + py) / oldZoom
+
+    setZoom(clamped)
+    requestAnimationFrame(() => {
+      el.scrollLeft = canvasX * clamped - px
+      el.scrollTop = canvasY * clamped - py
+    })
+  }, [zoom])
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      applyZoom(zoom - e.deltaY * 0.005, e.clientX, e.clientY)
+    }
+  }, [applyZoom, zoom])
+
+  const zoomIn = useCallback(() => applyZoom(zoom + ZOOM_STEP), [applyZoom, zoom])
+  const zoomOut = useCallback(() => applyZoom(zoom - ZOOM_STEP), [applyZoom, zoom])
+  const zoomReset = useCallback(() => applyZoom(1), [applyZoom])
+
   return (
     <div className="relative w-full h-full overflow-hidden">
       <div
@@ -187,9 +224,11 @@ export function FloorPlan() {
         onPointerMove={handleCanvasPointerMove}
         onPointerUp={handleCanvasPointerUp}
         onPointerCancel={handleCanvasPointerUp}
+        onWheel={handleWheel}
         className="w-full h-full overflow-auto"
       >
-        <div style={{ width: CANVAS_W, height: CANVAS_H, position: 'relative' }}>
+        <div style={{ width: CANVAS_W * zoom, height: CANVAS_H * zoom, position: 'relative' }}>
+          <div style={{ transform: `scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H, position: 'absolute', left: 0, top: 0 }}>
           <div className="absolute inset-4 border border-dashed border-stone-200 dark:border-stone-700 rounded pointer-events-none" />
           {tables.map((table) => (
             <TableShape key={table.id} table={table} />
@@ -210,6 +249,7 @@ export function FloorPlan() {
               }}
             />
           )}
+          </div>
         </div>
       </div>
       <GuestArrow scroll={scroll} vpSize={vpSize} />
@@ -232,6 +272,29 @@ export function FloorPlan() {
             className="w-10 text-xs text-center border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-100 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 py-0.5"
           />
         </div>
+      </div>
+
+      <div className="absolute bottom-28 right-4 z-20 flex flex-col items-center gap-1">
+        <button
+          onClick={zoomIn}
+          disabled={zoom >= ZOOM_MAX}
+          className="w-7 h-7 rounded bg-white dark:bg-stone-700 border border-stone-300 dark:border-stone-600 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-600 text-sm font-bold shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          +
+        </button>
+        <button
+          onClick={zoomReset}
+          className="w-7 h-5 rounded bg-white dark:bg-stone-700 border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-600 text-[10px] shadow-sm"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          onClick={zoomOut}
+          disabled={zoom <= ZOOM_MIN}
+          className="w-7 h-7 rounded bg-white dark:bg-stone-700 border border-stone-300 dark:border-stone-600 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-600 text-sm font-bold shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          −
+        </button>
       </div>
 
       <div
@@ -262,10 +325,10 @@ export function FloorPlan() {
           <div
             style={{
               position: 'absolute',
-              left: scroll.x * scaleX,
-              top: scroll.y * scaleY,
-              width: vpSize.w * scaleX,
-              height: vpSize.h * scaleY,
+              left: (scroll.x / zoom) * scaleX,
+              top: (scroll.y / zoom) * scaleY,
+              width: (vpSize.w / zoom) * scaleX,
+              height: (vpSize.h / zoom) * scaleY,
               border: '1px solid rgba(139, 92, 246, 0.7)',
               background: 'rgba(139, 92, 246, 0.08)',
               pointerEvents: 'none',
